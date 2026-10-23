@@ -12,8 +12,10 @@ android {
     applicationId = "dev.pearbell"
     minSdk = 29
     targetSdk = 35
-    versionCode = 1
-    versionName = "0.1.0"
+    // CI sets these: each build gets a higher code, so a new APK installs
+    // over the old one.
+    versionCode = (System.getenv("PEARBELL_VERSION_CODE") ?: "1").toInteger()
+    versionName = (System.getenv("PEARBELL_VERSION") ?: "0.1.0").replaceFirst(/^v/, "")
 
     // Phones are arm64; x86_64 covers Intel emulators.
     ndk {
@@ -21,11 +23,24 @@ android {
     }
   }
 
+  signingConfigs {
+    release {
+      def keystore = System.getenv("PEARBELL_KEYSTORE")
+      if (keystore) {
+        storeFile = file(keystore)
+        storePassword = System.getenv("PEARBELL_KEYSTORE_PASSWORD")
+        keyAlias = System.getenv("PEARBELL_KEY_ALIAS")
+        keyPassword = System.getenv("PEARBELL_KEY_PASSWORD")
+      }
+    }
+  }
+
   buildTypes {
     release {
       minifyEnabled = false
-      // Sign with the debug key so a release APK installs without extra setup.
-      signingConfig = signingConfigs.debug
+      // Without a release key, fall back to the debug key so the APK still
+      // installs. Android only accepts updates signed with the same key.
+      signingConfig = System.getenv("PEARBELL_KEYSTORE") ? signingConfigs.release : signingConfigs.debug
     }
   }
 

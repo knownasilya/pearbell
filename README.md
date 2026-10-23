@@ -81,28 +81,62 @@ If nobody answers in time, `ask` exits with code `2` (the default timeout is 10 
 
 ## Install the CLI
 
-You need Node 20 or later.
+You need Node 20 or later. Install straight from GitHub:
 
 ```bash
-cd ~/maintained/pearbell
+npm install -g github:knownasilya/pearbell
+pearbell --help
+```
+
+While the repository is private, this works for anyone whose git can read it (it uses your normal GitHub login). To update, run the same command again. To remove it, run `npm uninstall -g pearbell`.
+
+To hack on it instead, use a clone:
+
+```bash
+git clone https://github.com/knownasilya/pearbell && cd pearbell
 npm install
-npm link        # puts `pearbell` on your PATH
+npm link        # puts this checkout's `pearbell` on your PATH
 ```
 
 Identity and paired phones live in `~/.config/pearbell/` (set `PEARBELL_HOME` to change it). The daemon logs to `daemon.log` in the same folder.
 
 ## Install the Android app
 
-The APK is built from [android/](android). It needs Android 10 or later.
+It needs Android 10 or later. Get the APK one of these ways:
+
+- **A release:** download `pearbell-vX.Y.Z.apk` from the [Releases](https://github.com/knownasilya/pearbell/releases) page.
+- **The latest build:** open the newest green run under [Actions](https://github.com/knownasilya/pearbell/actions/workflows/android.yml) and download the `pearbell-apk` artifact (a zip with the APK inside).
+
+Open the APK on the phone and allow installs from that source. Or, with USB debugging on: `adb install pearbell-*.apk`.
+
+On first start, allow notifications. Then tap **Allow** on the "Stay reachable" card. Without it, Android may cut the connection while the screen is off.
+
+### Build it yourself
 
 ```bash
 npm run android:fetch-bare-kit   # once; downloads the Bare Kit prebuild (~400 MB zip, needs gh)
 npm run android:build            # android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `android/local.properties`). With the phone plugged in and USB debugging on, `npm run android:install` installs a debug build. The release APK is signed with the debug key, so you can sideload it as is.
+Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `android/local.properties`). With the phone plugged in, `npm run android:install` installs a debug build.
 
-On first start, allow notifications. Then tap **Allow** on the "run in the background" card. Without it, Android may cut the connection while the screen is off.
+### CI and releases
+
+[.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and builds the APK on every push and pull request. To publish a release, push a tag:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+**Signing.** Android installs an update only if it is signed with the same key as the installed app. Without a key, CI signs each build with a new throwaway key, so you must uninstall the app before you install a newer build. For updates in place, create a key once, keep a backup, and add it as repository secrets:
+
+```bash
+keytool -genkeypair -keystore pearbell.jks -alias pearbell -keyalg RSA -keysize 4096 -validity 10000
+gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -i pearbell.jks)
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body pearbell
+gh secret set ANDROID_KEY_PASSWORD
+```
 
 ## All commands
 
