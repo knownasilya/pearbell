@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
+import dev.pearbell.ui.Markdown
 
 object Notifier {
   const val SERVICE_ID = 1
@@ -68,8 +69,8 @@ object Notifier {
       .setSmallIcon(R.drawable.ic_bell)
       .setColor(ACCENT)
       .setContentTitle(msg.title.ifEmpty { msg.fromName })
-      .setContentText(msg.body)
-      .setStyle(Notification.BigTextStyle().bigText(msg.body))
+      .setContentText(Markdown.plain(msg.body))
+      .setStyle(Notification.BigTextStyle().bigText(Markdown.plain(msg.body)))
       .setSubText(msg.fromName)
       .setWhen(msg.receivedAt)
       .setShowWhen(true)

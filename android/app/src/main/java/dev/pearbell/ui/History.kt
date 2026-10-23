@@ -169,7 +169,7 @@ private fun MessageRow(
             }
             Spacer(Modifier.height(2.dp))
             Text(
-              msg.body,
+              rememberMarkdown(msg.body, links = false),
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               maxLines = 3,
@@ -256,7 +256,7 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
 
       Spacer(Modifier.height(18.dp))
       SelectionContainer {
-        Text(msg.body, style = MaterialTheme.typography.bodyLarge)
+        Text(rememberMarkdown(msg.body, links = true), style = MaterialTheme.typography.bodyLarge)
       }
 
       Spacer(Modifier.height(20.dp))

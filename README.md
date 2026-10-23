@@ -171,6 +171,16 @@ pearbell stop       # stop the background daemon
 
 Exit codes: `0` ok, `1` error, `2` timeout. When `send` times out before delivery, it still exits `0`: the message waits in the daemon's queue.
 
+### Markdown
+
+Message text is Markdown. The app shows **bold**, *italic*, `code`, ~~strike~~, headings, lists, quotes and fenced code blocks. Links (`[text](https://…)`, `<https://…>` or a bare `https://…`) open in the browser when you tap them on a question card or in a message's details. Only `http`, `https` and `mailto` links open. Notifications show the text without the markup.
+
+```bash
+pearbell ask -a "Ship it,Hold" "## Deploy ready
+PR **#42** is green: [view it](https://github.com/you/app/pull/42)
+- \`npm test\`: 211 passed"
+```
+
 ## Use it with AI tools
 
 **Claude Code hooks.** Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:

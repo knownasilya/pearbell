@@ -67,6 +67,10 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
           echo "PEARBELL_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
+      - name: Test the app
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --console=plain
+
       - name: Build the APK
         working-directory: android
         run: ./gradlew assembleRelease --console=plain

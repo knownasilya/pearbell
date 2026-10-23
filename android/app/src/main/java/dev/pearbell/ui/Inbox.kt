@@ -265,7 +265,7 @@ private fun QuestionCard(msg: Message, onOpen: () -> Unit, modifier: Modifier = 
       }
 
       Spacer(Modifier.height(14.dp))
-      Text(msg.body, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 26.sp))
+      Text(rememberMarkdown(msg.body, links = true), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 26.sp))
 
       if (msg.actions.isNotEmpty()) {
         Spacer(Modifier.height(16.dp))
