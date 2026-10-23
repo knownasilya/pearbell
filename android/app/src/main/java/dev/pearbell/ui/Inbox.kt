@@ -6,10 +6,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -161,12 +158,21 @@ private fun ConnectionPill(online: Boolean, peers: List<Peer>, onClick: () -> Un
 
 @Composable
 private fun PulsingDot(online: Boolean) {
+  // Pulse a few times when the link comes up, then rest: a forever animation
+  // would redraw the screen every frame while the app is open.
+  val t = remember { Animatable(1f) }
+  LaunchedEffect(online) {
+    if (!online) return@LaunchedEffect
+    repeat(3) {
+      t.snapTo(0f)
+      t.animateTo(1f, tween(1400))
+    }
+  }
+
   Box(contentAlignment = Alignment.Center, modifier = Modifier.size(14.dp)) {
-    if (online) {
-      val pulse = rememberInfiniteTransition(label = "pulse")
-      val t by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(1800), RepeatMode.Restart), label = "t")
+    if (online && t.value < 1f) {
       Box(
-        Modifier.size(14.dp).scale(0.6f + t * 0.8f).alpha((1f - t) * 0.5f)
+        Modifier.size(14.dp).scale(0.6f + t.value * 0.8f).alpha((1f - t.value) * 0.5f)
           .background(LocalExtra.current.online, CircleShape)
       )
     }
