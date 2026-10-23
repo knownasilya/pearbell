@@ -117,7 +117,7 @@ function handle (daemon, sock, req) {
   }
 }
 
-function sanitize (m = {}) {
+export function sanitize (m = {}) {
   return {
     title: String(m.title || ''),
     body: String(m.body || ''),

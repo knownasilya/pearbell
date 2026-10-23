@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import { parseArgs } from 'node:util'
 import DHT from 'hyperdht'
@@ -6,6 +7,7 @@ import qrcode from 'qrcode-terminal'
 import * as config from './config.js'
 import * as control from './control.js'
 import { Daemon } from './daemon.js'
+import { serveHttp } from './http.js'
 
 const HELP = `pearbell - peer-to-peer messages to your phone
 
@@ -18,6 +20,8 @@ Usage:
   pearbell daemon                    Run the background daemon in the
                                      foreground (other commands start it)
   pearbell stop                      Stop the background daemon
+  pearbell http [on|off|rotate]      Local web API for tools that can only
+                                     make HTTP requests (prints URL, token)
 
 Options for send and ask:
   -t, --title <title>                Notification title
@@ -43,6 +47,7 @@ const { values: opts, positionals } = parseArgs({
     timeout: { type: 'string' },
     json: { type: 'boolean' },
     quiet: { type: 'boolean', short: 'q' },
+    port: { type: 'string' },
     help: { type: 'boolean', short: 'h' }
   }
 })
@@ -75,6 +80,7 @@ async function run () {
     case 'unpair': return runUnpair()
     case 'daemon': return runDaemon()
     case 'stop': return runStop()
+    case 'http': return runHttp()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
   }
 }
@@ -203,6 +209,59 @@ async function runStop () {
   return 0
 }
 
+async function runHttp () {
+  const action = rest[0] || 'show'
+  const cfg = config.load()
+
+  if (action === 'on' || action === 'rotate') {
+    const port = opts.port ? Number(opts.port) : cfg.http?.port || 7457
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port takes a port number')
+    const token = action === 'rotate' || !cfg.http?.token ? randomBytes(24).toString('base64url') : cfg.http.token
+    cfg.http = { port, token }
+    config.save(cfg)
+    await restartDaemon()
+  } else if (action === 'off') {
+    delete cfg.http
+    config.save(cfg)
+    await restartDaemon()
+    console.log('HTTP API is off')
+    return 0
+  } else if (action !== 'show') {
+    throw new Error('Use: pearbell http [on|off|rotate] [--port 7457]')
+  }
+
+  if (!cfg.http) {
+    console.log('HTTP API is off. Turn it on with: pearbell http on')
+    return 0
+  }
+
+  const url = `http://127.0.0.1:${cfg.http.port}`
+  if (opts.json) {
+    console.log(JSON.stringify({ url, token: cfg.http.token }))
+  } else {
+    console.log(`HTTP API: ${url} (this computer only)`)
+    console.log(`Token:    ${cfg.http.token}\n`)
+    console.log(`curl -s ${url}/send -H "authorization: Bearer $TOKEN" -d '{"title":"Hi","body":"From curl"}'`)
+  }
+  return 0
+}
+
+// Stop the daemon (if any) and start a fresh one that reads the new config.
+async function restartDaemon () {
+  try {
+    const sock = await control.connect({ start: false })
+    let pid = null
+    await control.request(sock, { type: 'status' }, (frame) => { pid = frame.pid })
+    const stop = await control.connect({ start: false })
+    await control.request(stop, { type: 'stop' }, () => {})
+    for (let i = 0; pid && i < 100; i++) {
+      try { process.kill(pid, 0) } catch { break }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  } catch {}
+  ;(await control.connect()).end()
+}
+
 async function runDaemon () {
   const cfg = config.load()
   const dht = new DHT()
@@ -217,12 +276,19 @@ async function runDaemon () {
   const server = await control.serve(daemon)
   console.log(`${stamp()} pearbell daemon ${process.pid} listening, ${cfg.devices.length} paired phone(s)`)
 
+  let web = null
+  if (cfg.http?.token) {
+    web = await serveHttp(daemon, cfg.http)
+    console.log(`${stamp()} HTTP API on http://127.0.0.1:${cfg.http.port}`)
+  }
+
   await new Promise((resolve) => {
     process.once('SIGINT', resolve)
     process.once('SIGTERM', resolve)
   })
 
   console.log(`${stamp()} stopping`)
+  if (web) { web.close(); web.closeAllConnections() }
   server.closeAll()
   if (process.platform !== 'win32') fs.rmSync(control.socketPath(), { force: true })
   await daemon.stop()

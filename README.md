@@ -181,6 +181,36 @@ PR **#42** is green: [view it](https://github.com/you/app/pull/42)
 - \`npm test\`: 211 passed"
 ```
 
+## HTTP API
+
+Some tools can only make web requests: a [Kody](https://github.com/kentcdodds/kody-celld) job, a webhook relay, iOS Shortcuts. For those, the daemon can also listen on a local port:
+
+```bash
+pearbell http on            # prints the URL (http://127.0.0.1:7457) and a token
+pearbell http               # show them again
+pearbell http rotate        # new token
+pearbell http off
+```
+
+It listens on `127.0.0.1` only, and every request needs `Authorization: Bearer <token>`.
+
+```bash
+curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
+  -d '{"title":"Build","body":"**Tests passed**"}'
+# {"id":"…","delivered":["Pixel 8"],"queued":[]}
+
+curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
+  -d '{"body":"Deploy?","actions":["Yes","No"],"wait":true,"timeout":300}'
+# {"id":"…","reply":"Yes","device":"Pixel 8"}   (504 {"error":"timeout"} if no answer)
+```
+
+| Endpoint | Body | Answer |
+| --- | --- | --- |
+| `POST /send` | `body` (required), `title`, `actions` (array or `"a,b"`), `device`, `wait`, `timeout` (seconds) | `{ id, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
+| `GET /devices` | | `[{ name, publicKey, connected }]` |
+
+Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).
+
 ## Use it with AI tools
 
 **Claude Code hooks.** Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:
