@@ -136,7 +136,10 @@ export class Daemon extends EventEmitter {
 
       if (frame.type === 'hello') {
         clearTimeout(timer)
+        this._rename(device, frame.name)
         this._attach(device, conn)
+      } else if (frame.type === 'name') {
+        this._rename(device, frame.name)
       } else if (frame.type === 'ack') {
         this._onack(device, frame.id)
       } else if (frame.type === 'reply') {
@@ -148,6 +151,14 @@ export class Daemon extends EventEmitter {
         }
       }
     })
+  }
+
+  // The phone was renamed in its app.
+  _rename (device, name) {
+    const clean = typeof name === 'string' ? name.trim().slice(0, 64) : ''
+    if (!clean || clean === device.name) return
+    device.name = clean
+    this.emit('devices', this.devices)
   }
 
   _attach (device, conn) {

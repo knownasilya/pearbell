@@ -1,6 +1,6 @@
 package dev.pearbell.ui
 
-import android.os.Build
+import android.widget.Toast
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -24,6 +24,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,10 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.pearbell.Hub
 import dev.pearbell.Peer
+import dev.pearbell.PhoneName
 import dev.pearbell.R
 
 @Composable
@@ -113,8 +117,10 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
         Column(Modifier.padding(top = 40.dp, start = 4.dp, end = 4.dp)) {
           Text("This phone", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Spacer(Modifier.height(8.dp))
+          PhoneNameField()
+          Spacer(Modifier.height(12.dp))
           Text(
-            "Shows up as “${Build.MODEL}” on your computers. Messages travel straight between your devices over the Pear network, end-to-end encrypted. No server keeps a copy.",
+            "Messages travel straight between your devices over the Pear network, end-to-end encrypted. No server keeps a copy.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -146,5 +152,32 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
       confirmButton = { TextButton(onClick = { Hub.clear(); clearing = false }) { Text("Clear") } },
       dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } }
     )
+  }
+}
+
+// Rename this phone; paired computers pick it up when they next connect.
+@Composable
+private fun PhoneNameField() {
+  val context = LocalContext.current
+  var saved by remember { mutableStateOf(PhoneName.get(context)) }
+  var name by remember { mutableStateOf(saved) }
+  val changed = PhoneName.clean(name) != saved && name.isNotBlank()
+
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    OutlinedTextField(
+      value = name,
+      onValueChange = { name = it.take(64) },
+      label = { Text("Name") },
+      singleLine = true,
+      shape = MaterialTheme.shapes.medium,
+      modifier = Modifier.weight(1f)
+    )
+    Spacer(Modifier.width(8.dp))
+    FilledTonalButton(enabled = changed, onClick = {
+      Hub.rename(context, name)
+      saved = PhoneName.clean(name)
+      name = saved
+      Toast.makeText(context, "Saved. Your computers get the new name right away, or when they next connect.", Toast.LENGTH_SHORT).show()
+    }) { Text("Save") }
   }
 }

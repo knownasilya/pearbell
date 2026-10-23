@@ -76,7 +76,7 @@ class BellService : Service() {
     ipc = channel
     channel.readable { drain() }
 
-    write(JSONObject().put("type", "init").put("dir", filesDir.absolutePath))
+    write(JSONObject().put("type", "init").put("dir", filesDir.absolutePath).put("name", PhoneName.get(this)))
     Hub.attach { write(it) }
   }
 

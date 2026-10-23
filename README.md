@@ -34,7 +34,7 @@ Waiting for the phone...
 Paired with Pixel 8
 ```
 
-In the app, tap **Scan QR code** (or **Enter the code instead** and paste it). The app says "You're paired", and the inbox shows "Connected to" your computer.
+In the app, give the phone a name (it starts as the device name from Android's settings), then tap **Scan QR code** (or **Enter the code instead** and paste it). The CLI prints the phone's name, the app says "You're paired", and the inbox shows "Connected to" your computer. You can rename the phone later on the app's Computers screen; paired computers pick up the new name.
 
 **2. Send a notification.** It arrives as a normal Android notification and lands in the inbox. In the app, tap a message to see which computer sent it and exactly when. Swipe left to archive it, right to delete it (both can be undone).
 

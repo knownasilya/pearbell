@@ -173,6 +173,20 @@ test('archive, delete and undo', async (t) => {
   t.absent(phone.undelete(id), 'undo works once')
 })
 
+test('the computer picks up a renamed phone', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  phone.setName('Work phone')
+  await waitFor(() => daemon.findDevice(device.publicKey).name === 'Work phone')
+  t.pass('rename sent on the open link')
+
+  // A rename while offline arrives with the next hello.
+  phone.name = 'Pocket'
+  daemon.conns.get(device.publicKey).destroy()
+  await waitFor(() => daemon.findDevice(device.publicKey).name === 'Pocket')
+  t.pass('name sent on reconnect')
+})
+
 test('unknown keys cannot connect', async (t) => {
   const { daemon, node } = await setup(t)
 

@@ -1,5 +1,6 @@
 package dev.pearbell
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,9 +66,16 @@ object Hub {
     main.post { sink?.invoke(cmd) ?: queue.addLast(cmd) }
   }
 
-  fun pair(code: String, deviceName: String) {
+  fun pair(code: String, phoneName: String) {
     pairing.value = Pairing.Busy
-    command("pair", "code" to code.trim(), "name" to deviceName)
+    command("rename", "name" to phoneName)
+    command("pair", "code" to code.trim(), "name" to phoneName)
+  }
+
+  // Save the name and tell paired computers about it.
+  fun rename(context: Context, name: String) {
+    PhoneName.set(context, name)
+    command("rename", "name" to PhoneName.clean(name))
   }
 
   fun answer(id: String, text: String) = command("answer", "id" to id, "text" to text)

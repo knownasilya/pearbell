@@ -1,6 +1,5 @@
 package dev.pearbell.ui
 
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -39,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,6 +47,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import dev.pearbell.Hub
 import dev.pearbell.Pairing
+import dev.pearbell.PhoneName
 import dev.pearbell.R
 
 // First-run onboarding (first = true) and "pair another computer".
@@ -73,13 +74,19 @@ fun PairScreen(first: Boolean, onBack: () -> Unit, onDone: () -> Unit) {
 private fun Steps(first: Boolean, pairing: Pairing) {
   var code by rememberSaveable { mutableStateOf("") }
   var typing by rememberSaveable { mutableStateOf(false) }
-  val deviceName = Build.MODEL ?: "Android"
+  val context = LocalContext.current
+  var phoneName by rememberSaveable { mutableStateOf(PhoneName.get(context)) }
+  val nameOk = phoneName.isNotBlank()
+  val pairAs = {
+    PhoneName.set(context, phoneName)
+    PhoneName.clean(phoneName)
+  }
   val busy = pairing == Pairing.Busy
 
   val scan = rememberLauncherForActivityResult(ScanContract()) { result ->
     result.contents?.let {
       code = it
-      Hub.pair(it, deviceName)
+      Hub.pair(it, pairAs())
     }
   }
 
@@ -112,11 +119,23 @@ private fun Steps(first: Boolean, pairing: Pairing) {
     )
 
     Spacer(Modifier.height(32.dp))
-    Step(1, "On your computer, run") {
+    Step(1, "Name this phone") {
+      OutlinedTextField(
+        value = phoneName,
+        onValueChange = { phoneName = it.take(64) },
+        singleLine = true,
+        isError = !nameOk,
+        shape = MaterialTheme.shapes.medium,
+        supportingText = { Text(if (nameOk) "Your computers will show this name." else "Give the phone a name.") },
+        modifier = Modifier.fillMaxWidth()
+      )
+    }
+    Spacer(Modifier.height(20.dp))
+    Step(2, "On your computer, run") {
       CodeChip("pearbell pair", Modifier.fillMaxWidth())
     }
     Spacer(Modifier.height(20.dp))
-    Step(2, "Scan the QR code it shows") {}
+    Step(3, "Scan the QR code it shows") {}
 
     Spacer(Modifier.height(32.dp))
     Button(
@@ -129,7 +148,7 @@ private fun Steps(first: Boolean, pairing: Pairing) {
             .setOrientationLocked(false)
         )
       },
-      enabled = !busy,
+      enabled = !busy && nameOk,
       modifier = Modifier.fillMaxWidth().height(56.dp)
     ) {
       Icon(painterResource(R.drawable.ic_qr), contentDescription = null, modifier = Modifier.size(20.dp))
@@ -154,8 +173,8 @@ private fun Steps(first: Boolean, pairing: Pairing) {
           modifier = Modifier.fillMaxWidth()
         )
         FilledTonalButton(
-          enabled = code.isNotBlank() && !busy,
-          onClick = { Hub.pair(code, deviceName) },
+          enabled = code.isNotBlank() && !busy && nameOk,
+          onClick = { Hub.pair(code, pairAs()) },
           modifier = Modifier.fillMaxWidth().height(52.dp)
         ) { Text("Pair") }
       }

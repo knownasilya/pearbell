@@ -15,7 +15,7 @@ const MIN_RETRY = 1_000
 const MAX_RETRY = 30_000
 
 export class Phone {
-  constructor ({ dht, state = {}, save = noop, emit = noop }) {
+  constructor ({ dht, state = {}, save = noop, emit = noop, name = '' }) {
     this.dht = dht
     this.state = {
       seed: state.seed || toHex(crypto.randomBytes(32)),
@@ -26,6 +26,7 @@ export class Phone {
     this.emit = emit
     this.keyPair = DHT.keyPair(fromHex(this.state.seed))
     this.links = new Map()
+    this.name = cleanName(name)
     this.trash = [] // recently deleted messages, for undo
     this.started = false
 
@@ -69,7 +70,15 @@ export class Phone {
   }
 
   // Dial the computer named in the pairing code and prove we hold its token.
-  async pair (code, name) {
+  // The name paired computers show for this phone.
+  setName (name) {
+    const clean = cleanName(name)
+    if (!clean || clean === this.name) return
+    this.name = clean
+    for (const link of this.links.values()) link.send({ type: 'name', name: clean })
+  }
+
+  async pair (code, name = this.name) {
     const { publicKey, token } = decodePairCode(code)
     const conn = this.dht.connect(publicKey, { keyPair: this.keyPair })
     conn.on('error', noop)
@@ -87,7 +96,7 @@ export class Phone {
           clearTimeout(timer)
           reject(new Error('The computer closed the connection'))
         })
-        writeJSON(conn, { type: 'pair', token: toHex(token), name })
+        writeJSON(conn, { type: 'pair', token: toHex(token), name: cleanName(name) || 'phone' })
       })
 
       if (answer.type !== 'paired') throw new Error(answer.error || 'Pairing refused')
@@ -300,7 +309,7 @@ class Link {
         this.connected = true
         this.delay = MIN_RETRY
         onJSON(conn, (frame) => phone._onframe(this, frame))
-        writeJSON(conn, { type: 'hello' })
+        writeJSON(conn, { type: 'hello', name: phone.name || undefined })
         phone._onopen(this)
 
         await new Promise((resolve) => conn.once('close', resolve))
@@ -325,6 +334,10 @@ class Link {
       this.delay = Math.min(this.delay * 2, MAX_RETRY)
     }
   }
+}
+
+function cleanName (name) {
+  return typeof name === 'string' ? name.trim().slice(0, 64) : ''
 }
 
 function str (value, max) {

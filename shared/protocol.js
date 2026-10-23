@@ -9,7 +9,8 @@
 //   computer -> phone  { type: 'paired', name }  or  { type: 'error', error }
 //
 // After that, on every connection:
-//   phone -> computer  { type: 'hello' }
+//   phone -> computer  { type: 'hello', name }   name: its current name
+//   phone -> computer  { type: 'name', name }    the phone was renamed
 //   computer -> phone  { type: 'hello', name }   its current name
 //   phone -> computer  { type: 'pending', ids }   questions it still shows as open
 //   computer -> phone  { type: 'msg', id, title, body, actions, wantsReply }
