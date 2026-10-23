@@ -1,0 +1,87 @@
+/* global Bare, BareKit */
+// Entry point of the Bare worklet inside the Android app. It runs the shared
+// phone core and talks to the Kotlin side over Bare Kit IPC with
+// newline-delimited JSON.
+//
+// Kotlin -> worklet: init, pair, answer, unpair, clear
+// worklet -> Kotlin: ready, state, message, updated, paired, pair-error, error
+import fs from 'bare-fs'
+import path from 'bare-path'
+import DHT from 'hyperdht'
+import { Phone } from '../../../../../shared/phone.js'
+import { onJSON, writeJSON } from '../../../../../shared/lines.js'
+
+let ipc = null
+let phone = null
+
+// A thrown error would take the whole app down, so report it instead.
+Bare.on('uncaughtException', (err) => report(err))
+Bare.on('unhandledRejection', (err) => report(err))
+
+waitForIPC().then((stream) => {
+  ipc = stream
+  onJSON(ipc, (cmd) => {
+    oncommand(cmd).catch(report)
+  })
+})
+
+async function oncommand (cmd) {
+  switch (cmd.type) {
+    case 'init': return init(cmd)
+    case 'pair':
+      try {
+        await phone.pair(cmd.code, cmd.name)
+      } catch (err) {
+        send({ type: 'pair-error', error: err.message })
+      }
+      return
+    case 'answer': return phone.answer(cmd.id, cmd.text)
+    case 'unpair': return phone.unpair(cmd.publicKey)
+    case 'clear': return phone.clear()
+  }
+}
+
+async function init ({ dir }) {
+  if (phone) {
+    send({ type: 'ready', publicKey: phone.publicKey.toString('hex'), ...phone.snapshot() })
+    return
+  }
+
+  const file = path.join(dir, 'state.json')
+  let state = {}
+  try {
+    state = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch {}
+
+  phone = new Phone({
+    dht: new DHT(),
+    state,
+    save (s) {
+      fs.writeFileSync(file + '.tmp', JSON.stringify(s))
+      fs.renameSync(file + '.tmp', file)
+    },
+    emit: send
+  })
+
+  await phone.start()
+}
+
+function send (event) {
+  if (ipc) writeJSON(ipc, event)
+}
+
+function report (err) {
+  console.error(err)
+  send({ type: 'error', error: String((err && err.stack) || err) })
+}
+
+function waitForIPC () {
+  return new Promise((resolve) => {
+    if (BareKit.IPC) return resolve(BareKit.IPC)
+    const timer = setInterval(() => {
+      if (!BareKit.IPC) return
+      clearInterval(timer)
+      resolve(BareKit.IPC)
+    }, 10)
+  })
+}

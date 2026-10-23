@@ -1,0 +1,11 @@
+node_modules/
+.fake-phone/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/libs/bare-kit/
+android/app/src/main/addons/
+android/app/src/main/assets/app.bundle
+*.apk
+.DS_Store

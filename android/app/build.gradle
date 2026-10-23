@@ -1,0 +1,91 @@
+plugins {
+  id "com.android.application"
+  id "org.jetbrains.kotlin.android"
+  id "org.jetbrains.kotlin.plugin.compose"
+}
+
+android {
+  namespace = "dev.pearbell"
+  compileSdk = 36
+
+  defaultConfig {
+    applicationId = "dev.pearbell"
+    minSdk = 29
+    targetSdk = 35
+    versionCode = 1
+    versionName = "0.1.0"
+
+    // Phones are arm64; x86_64 covers Intel emulators.
+    ndk {
+      abiFilters "arm64-v8a", "x86_64"
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled = false
+      // Sign with the debug key so a release APK installs without extra setup.
+      signingConfig = signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  buildFeatures {
+    compose = true
+  }
+
+  sourceSets {
+    main {
+      jniLibs.srcDirs "src/main/addons", "libs/bare-kit/jni"
+    }
+  }
+
+  packaging {
+    jniLibs {
+      // Bare Kit loads addons by file name, so keep them unpacked on disk.
+      useLegacyPackaging = true
+    }
+  }
+}
+
+// The worklet JS and its native addons come from the repo root, where the
+// shared code and node_modules live.
+def root = rootProject.projectDir.parentFile
+def entry = "android/app/src/main/js/app.js"
+
+tasks.register("linkAddons", Exec) {
+  workingDir root
+  inputs.file(new File(root, "package-lock.json"))
+  outputs.dir("src/main/addons")
+  commandLine "node_modules/.bin/bare-link", "--preset", "android", "--out", "android/app/src/main/addons", entry
+}
+
+tasks.register("packWorklet", Exec) {
+  workingDir root
+  inputs.dir(new File(root, "shared"))
+  inputs.dir("src/main/js")
+  outputs.file("src/main/assets/app.bundle")
+  commandLine "node_modules/.bin/bare-pack", "--preset", "android", "--out", "android/app/src/main/assets/app.bundle", entry
+}
+
+preBuild.dependsOn linkAddons, packWorklet
+
+dependencies {
+  implementation fileTree(dir: "libs", include: ["bare-kit/classes.jar"])
+
+  implementation platform("androidx.compose:compose-bom:2025.08.00")
+  implementation "androidx.compose.material3:material3"
+  implementation "androidx.compose.ui:ui"
+  implementation "androidx.activity:activity-compose:1.10.1"
+  implementation "androidx.lifecycle:lifecycle-runtime-compose:2.9.2"
+  implementation "androidx.core:core-ktx:1.16.0"
+  implementation "com.journeyapps:zxing-android-embedded:4.3.0"
+}

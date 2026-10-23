@@ -1,0 +1,132 @@
+# pearbell
+
+Send a message from your terminal to your Android phone. Get the answer back. No server, no account.
+
+pearbell is a small ntfy.sh alternative for AI coding tools. An agent can tell you that a job is done, or ask you a question and wait for your reply. It runs on the [Pear](https://pears.com/) peer-to-peer stack: HyperDHT finds the peers and opens an end-to-end encrypted Noise connection, and Bare Kit runs the same JavaScript inside the Android app.
+
+```bash
+pearbell send -t "Claude Code" "Refactor done, 42 tests pass"
+pearbell ask -a "Yes,No" "Push the branch to origin?"   # prints: Yes
+```
+
+## How it works
+
+```
+ terminal                       your computer                          phone
+ ─────────                      ─────────────                          ─────
+ pearbell send ──unix socket──▶ pearbell daemon ◀──HyperDHT (Noise)─── pearbell app
+ pearbell ask  ◀── reply ─────  (auto-started)  ─── msg ─────────────▶ notification
+                                                ◀── reply ───────────  (buttons / text)
+```
+
+- **The phone always dials the computer.** Many phones sit behind carrier NATs that refuse incoming connections. So the app keeps one open connection to each paired computer and redials when it drops (1 s back-off, up to 30 s, and at once on a network change).
+- **The daemon** listens on the computer's HyperDHT key. Any `pearbell` command starts it in the background. It holds messages until each phone has them (up to a day), so a phone that is offline gets them later.
+- **Pairing** uses a one-time code: the computer's public key plus a random token. After pairing, each side only accepts the other's key.
+- **Replies** come from the notification (quick buttons or a typed reply) or from the app. If the phone is offline when you answer, the reply goes out when it reconnects.
+
+## Install the CLI
+
+You need Node 20 or later.
+
+```bash
+cd ~/maintained/pearbell
+npm install
+npm link        # puts `pearbell` on your PATH
+```
+
+Identity and paired phones live in `~/.config/pearbell/` (set `PEARBELL_HOME` to change it). The daemon logs to `daemon.log` in the same folder.
+
+## Install the Android app
+
+The APK is built from [android/](android). It needs Android 10 or later.
+
+```bash
+npm run android:fetch-bare-kit   # once; downloads the Bare Kit prebuild (~400 MB zip, needs gh)
+npm run android:build            # android/app/build/outputs/apk/release/app-release.apk
+```
+
+Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `android/local.properties`). With the phone plugged in and USB debugging on, `npm run android:install` installs a debug build. The release APK is signed with the debug key, so you can sideload it as is.
+
+On first start, allow notifications. Then tap **Allow** on the "run in the background" card. Without it, Android may cut the connection while the screen is off.
+
+## Pair
+
+```bash
+pearbell pair
+```
+
+It prints a QR code. In the app, tap **Scan QR code**, or paste the code below the QR into the text box. You can pair one phone with many computers, and one computer with many phones.
+
+## Use
+
+```bash
+pearbell send "Build finished"                 # notification
+pearbell send -t "CI" -d pixel "Deploy done"   # title, one phone only
+pearbell ask "Which branch name?"              # waits, prints the reply
+pearbell ask -a "Approve,Reject" "Run migration 0042?"
+git log -1 | pearbell send -t "New commit" -   # body from stdin
+pearbell ask --json "Continue?"                # {"id":"…","reply":"…","device":"…"}
+
+pearbell devices    # paired phones, online or not
+pearbell unpair pixel
+pearbell stop       # stop the background daemon
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-t, --title` | Notification title |
+| `-a, --actions a,b,c` | Up to 3 quick-reply buttons (the notification shows 2 plus Reply) |
+| `-d, --device` | Only this phone (name or start of its key) |
+| `-w, --wait` | Wait for a reply (`send -w` is `ask`) |
+| `--timeout s` | `send`: wait this long for delivery (default 10). `ask`: wait this long for a reply (default 600). `0` waits forever. |
+| `--json` | Machine-readable output |
+| `-q, --quiet` | No progress lines on stderr |
+
+Exit codes: `0` ok, `1` error, `2` timeout. When `send` times out before delivery, it still exits `0`: the message waits in the daemon's queue.
+
+## Use it with AI tools
+
+**Claude Code hooks.** Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "jq -r .message | pearbell send -q -t 'Claude Code' -" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "pearbell send -q -t 'Claude Code' 'Finished, waiting for you'" }] }
+    ]
+  }
+}
+```
+
+**Let the agent ask you.** Add to `CLAUDE.md` or `AGENTS.md`:
+
+```md
+When you need a decision from me and I seem away, run
+`pearbell ask -a "Yes,No" "<question>"` and use the printed reply.
+```
+
+## Develop
+
+```bash
+npm test                     # daemon and phone core on a local HyperDHT testnet
+npm run fake-phone -- pair <code>   # a phone stand-in in Node, on the real DHT
+npm run fake-phone           # listen; type a reply and press Enter
+```
+
+`FAKE_PHONE_AUTO=yes npm run fake-phone` answers every question at once.
+
+### Layout
+
+- [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams.
+- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server and queue), [control.js](cli/control.js) (local socket, daemon auto-start).
+- [android/](android): Kotlin app. [app.js](android/app/src/main/js/app.js) is the Bare worklet entry, bundled with `bare-pack` and linked with `bare-link` during the Gradle build. [BellService.kt](android/app/src/main/java/dev/pearbell/BellService.kt) is a foreground service that keeps the worklet alive and talks to it over Bare Kit IPC.
+
+## Limits
+
+- **Android only** for now. The phone core is plain Bare JavaScript, so an iOS app could reuse it. But iOS does not let apps keep a connection open in the background, so it would need a push service.
+- **The computer must be on** with the daemon running. After a reboot, the daemon starts with your next `pearbell` command, and the phone finds it within 30 seconds.
+- **Two strict NATs** (for example, both sides on carrier networks) can still fail to connect. A computer on a home or office network is fine.
+- **Battery.** The app holds one idle encrypted connection per computer. That costs little, but it is not free.
