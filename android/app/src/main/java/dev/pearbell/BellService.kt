@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -22,6 +24,13 @@ class BellService : Service() {
   private val inbox = ByteArrayOutputStream()
   private val outbox = ArrayDeque<ByteBuffer>()
   private var writing = false
+  private val ticker = Handler(Looper.getMainLooper())
+  private val checkUpdates = object : Runnable {
+    override fun run() {
+      Updater.check(this@BellService)
+      ticker.postDelayed(this, 60 * 60 * 1000L)
+    }
+  }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -29,15 +38,26 @@ class BellService : Service() {
     super.onCreate()
     Notifier.createChannels(this)
 
-    val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING else 0
-    startForeground(Notifier.SERVICE_ID, Notifier.serviceNotification(this), type)
+    goForeground()
 
     startWorklet()
+    ticker.post(checkUpdates)
   }
 
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
+  // Android wants startForeground() after every startForegroundService(), not
+  // only the first; the app starts us on launch, on replies and after updates.
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    goForeground()
+    return START_STICKY
+  }
+
+  private fun goForeground() {
+    val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING else 0
+    startForeground(Notifier.SERVICE_ID, Notifier.serviceNotification(this, Hub.peers.value), type)
+  }
 
   override fun onDestroy() {
+    ticker.removeCallbacks(checkUpdates)
     Hub.detach()
     ipc?.close()
     worklet?.terminate()

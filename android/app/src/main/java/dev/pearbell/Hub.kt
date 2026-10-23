@@ -10,6 +10,7 @@ data class Peer(val publicKey: String, val name: String, val pairedAt: Long, val
 
 data class Message(
   val id: String,
+  val from: String,
   val fromName: String,
   val title: String,
   val body: String,
@@ -17,7 +18,9 @@ data class Message(
   val wantsReply: Boolean,
   val receivedAt: Long,
   val answer: String?,
+  val answeredAt: Long?,
   val closed: Boolean,
+  val archived: Boolean,
 ) {
   val open get() = wantsReply && answer == null && !closed
 }
@@ -73,6 +76,12 @@ object Hub {
 
   fun clear() = command("clear")
 
+  fun archive(id: String, archived: Boolean = true) = command("archive", "id" to id, "archived" to archived)
+
+  fun delete(id: String) = command("delete", "id" to id)
+
+  fun undelete(id: String) = command("undelete", "id" to id)
+
   fun applyState(event: JSONObject) {
     event.optJSONArray("peers")?.let { peers.value = parsePeers(it) }
     event.optJSONArray("messages")?.let { arr ->
@@ -97,6 +106,7 @@ object Hub {
     val actions = o.optJSONArray("actions")
     return Message(
       id = o.getString("id"),
+      from = o.optString("from"),
       fromName = pretty(o.optString("fromName")),
       title = o.optString("title"),
       body = o.optString("body"),
@@ -104,7 +114,9 @@ object Hub {
       wantsReply = o.optBoolean("wantsReply"),
       receivedAt = o.optLong("receivedAt"),
       answer = if (o.isNull("answer")) null else o.optString("answer"),
+      answeredAt = if (o.isNull("answeredAt") || !o.has("answeredAt")) null else o.optLong("answeredAt"),
       closed = o.optBoolean("closed"),
+      archived = o.optBoolean("archived"),
     )
   }
 }

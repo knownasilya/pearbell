@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pearbell.ui.ArchiveScreen
 import dev.pearbell.ui.BellHero
 import dev.pearbell.ui.ComputersScreen
 import dev.pearbell.ui.InboxScreen
@@ -33,6 +34,11 @@ import dev.pearbell.ui.PairScreen
 import dev.pearbell.ui.PearbellTheme
 
 class MainActivity : ComponentActivity() {
+  override fun onResume() {
+    super.onResume()
+    Updater.check(this)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
@@ -53,7 +59,7 @@ class MainActivity : ComponentActivity() {
   }
 }
 
-private val order = listOf("splash", "onboard", "inbox", "computers", "pair")
+private val order = listOf("splash", "onboard", "inbox", "archive", "computers", "pair")
 
 @Composable
 private fun App() {
@@ -75,7 +81,7 @@ private fun App() {
     screen = to
   }
 
-  BackHandler(enabled = target == "computers" || target == "pair") {
+  BackHandler(enabled = target == "computers" || target == "pair" || target == "archive") {
     go(if (target == "pair") "computers" else "inbox")
   }
 
@@ -90,9 +96,10 @@ private fun App() {
     when (s) {
       "splash" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { BellHero() }
       "onboard" -> PairScreen(first = true, onBack = {}, onDone = { go("inbox") })
+      "archive" -> ArchiveScreen(messages, onBack = { go("inbox") })
       "computers" -> ComputersScreen(peers, onBack = { go("inbox") }, onPair = { go("pair") })
       "pair" -> PairScreen(first = false, onBack = { go("computers") }, onDone = { go("inbox") })
-      else -> InboxScreen(online, peers, messages, onComputers = { go("computers") })
+      else -> InboxScreen(online, peers, messages, onComputers = { go("computers") }, onArchive = { go("archive") })
     }
   }
 }

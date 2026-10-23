@@ -154,6 +154,25 @@ test('questions lost in a daemon restart get closed on reconnect', async (t) => 
   t.pass('phone closed the orphaned question')
 })
 
+test('archive, delete and undo', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const entry = daemon.send({ message: { body: 'Keep me', actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+  const id = entry.id
+
+  t.ok(phone.archive(id))
+  t.is(phone.findMessage(id).archived, true)
+  t.ok(phone.archive(id, false))
+  t.is(phone.findMessage(id).archived, false)
+
+  t.ok(phone.delete(id))
+  t.absent(phone.findMessage(id))
+  t.ok(phone.undelete(id))
+  t.is(phone.findMessage(id).body, 'Keep me')
+  t.absent(phone.undelete(id), 'undo works once')
+})
+
 test('unknown keys cannot connect', async (t) => {
   const { daemon, node } = await setup(t)
 

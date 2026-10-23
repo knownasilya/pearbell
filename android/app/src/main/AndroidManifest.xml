@@ -6,6 +6,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+  <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
   <application
     android:label="pearbell"
@@ -30,6 +32,8 @@
       android:foregroundServiceType="remoteMessaging" />
 
     <receiver android:name=".ReplyReceiver" android:exported="false" />
+
+    <receiver android:name=".UpdateReceiver" android:exported="false" />
 
     <receiver android:name=".BootReceiver" android:exported="true">
       <intent-filter>

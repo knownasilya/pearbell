@@ -26,6 +26,7 @@ export class Phone {
     this.emit = emit
     this.keyPair = DHT.keyPair(fromHex(this.state.seed))
     this.links = new Map()
+    this.trash = [] // recently deleted messages, for undo
     this.started = false
 
     // A new network (Wi-Fi to mobile data, say) is worth an instant redial.
@@ -125,6 +126,40 @@ export class Phone {
     this._emitState()
   }
 
+  archive (id, archived = true) {
+    const msg = this.findMessage(id)
+    if (!msg || msg.archived === archived) return false
+
+    msg.archived = archived
+    this.save()
+    this.emit({ type: 'updated', message: msg })
+    return true
+  }
+
+  delete (id) {
+    const i = this.state.messages.findIndex((m) => m.id === id)
+    if (i === -1) return false
+
+    const [msg] = this.state.messages.splice(i, 1)
+    this.trash.unshift(msg)
+    this.trash.length = Math.min(this.trash.length, 20)
+    this.save()
+    this._emitState()
+    return true
+  }
+
+  undelete (id) {
+    const i = this.trash.findIndex((m) => m.id === id)
+    if (i === -1 || this.findMessage(id)) return false
+
+    const [msg] = this.trash.splice(i, 1)
+    this.state.messages.push(msg)
+    this.state.messages.sort((a, b) => b.receivedAt - a.receivedAt)
+    this.save()
+    this._emitState()
+    return true
+  }
+
   // The user answered a message, from a notification or from the app.
   answer (id, text) {
     const msg = this.findMessage(id)
@@ -198,7 +233,8 @@ export class Phone {
         receivedAt: Date.now(),
         answer: null,
         answeredAt: null,
-        closed: false
+        closed: false,
+        archived: false
       }
 
       this.state.messages.unshift(msg)

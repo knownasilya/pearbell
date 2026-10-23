@@ -5,13 +5,12 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -75,66 +76,105 @@ import dev.pearbell.Peer
 import dev.pearbell.R
 
 @Composable
-fun InboxScreen(online: Boolean, peers: List<Peer>, messages: List<Message>, onComputers: () -> Unit) {
-  ProvideNow { Inbox(online, peers, messages, onComputers) }
+fun InboxScreen(
+  online: Boolean,
+  peers: List<Peer>,
+  messages: List<Message>,
+  onComputers: () -> Unit,
+  onArchive: () -> Unit,
+) {
+  ProvideNow { Inbox(online, peers, messages, onComputers, onArchive) }
 }
 
 @Composable
-private fun Inbox(online: Boolean, peers: List<Peer>, messages: List<Message>, onComputers: () -> Unit) {
+private fun Inbox(
+  online: Boolean,
+  peers: List<Peer>,
+  all: List<Message>,
+  onComputers: () -> Unit,
+  onArchive: () -> Unit,
+) {
+  val messages = all.filterNot { it.archived }
   val open = messages.filter { it.open }
   val rest = messages.filterNot { it.open }
   val context = LocalContext.current
   val days = rest.groupBy { dayLabel(context, it.receivedAt) }
+  val snackbar = remember { SnackbarHostState() }
+  val actions = rememberMessageActions(snackbar)
+  var details by rememberSaveable { mutableStateOf<String?>(null) }
 
-  Column(Modifier.fillMaxSize().statusBarsPadding()) {
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Inbox", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
-        FilledTonalIconButton(onClick = onComputers) {
-          Icon(painterResource(R.drawable.ic_laptop), contentDescription = "Computers", modifier = Modifier.size(20.dp))
+  Box(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+      Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text("Inbox", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
+          FilledTonalIconButton(onClick = onArchive) {
+            Icon(painterResource(R.drawable.ic_archive), contentDescription = "Archive", modifier = Modifier.size(20.dp))
+          }
+          Spacer(Modifier.width(4.dp))
+          FilledTonalIconButton(onClick = onComputers) {
+            Icon(painterResource(R.drawable.ic_laptop), contentDescription = "Computers", modifier = Modifier.size(20.dp))
+          }
         }
-      }
-      Spacer(Modifier.height(8.dp))
-      ConnectionPill(online, peers, onComputers)
-    }
-
-    BatteryBanner()
-
-    if (messages.isEmpty()) {
-      EmptyInbox(peers)
-      return@Column
-    }
-
-    // The list keeps its first visible row in place, so a message that lands
-    // above it would stay off screen. Bring it into view if we are near the top.
-    val list = rememberLazyListState()
-    LaunchedEffect(messages.firstOrNull()?.id, open.size) {
-      if (list.firstVisibleItemIndex <= 2) list.animateScrollToItem(0)
-    }
-
-    LazyColumn(
-      Modifier.fillMaxSize().imePadding(),
-      state = list,
-      contentPadding = PaddingValues(
-        start = 16.dp, end = 16.dp, top = 8.dp,
-        bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-      )
-    ) {
-      if (open.isNotEmpty()) {
-        item(key = "h-open") { SectionHeader("Waiting for you", open.size, Modifier.animateItem()) }
-        itemsIndexed(open, key = { _, m -> m.id }) { _, msg ->
-          QuestionCard(msg, Modifier.animateItem().padding(bottom = 12.dp))
-        }
+        Spacer(Modifier.height(8.dp))
+        ConnectionPill(online, peers, onComputers)
       }
 
-      for ((day, list) in days) {
-        item(key = "h-$day") { SectionHeader(day, null, Modifier.animateItem()) }
-        itemsIndexed(list, key = { _, m -> m.id }) { i, msg ->
-          MessageRow(msg, first = i == 0, last = i == list.lastIndex, Modifier.animateItem())
+      UpdateBanner()
+      BatteryBanner()
+
+      if (messages.isEmpty()) {
+        EmptyInbox(peers)
+        return@Column
+      }
+
+      // The list keeps its first visible row in place, so a message that lands
+      // above it would stay off screen. Bring it into view if we are near the top.
+      val list = rememberLazyListState()
+      LaunchedEffect(messages.firstOrNull()?.id, open.size) {
+        if (list.firstVisibleItemIndex <= 2) list.animateScrollToItem(0)
+      }
+
+      LazyColumn(
+        Modifier.fillMaxSize().imePadding(),
+        state = list,
+        contentPadding = PaddingValues(
+          start = 16.dp, end = 16.dp, top = 8.dp,
+          bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        )
+      ) {
+        if (open.isNotEmpty()) {
+          item(key = "h-open") { SectionHeader("Waiting for you", open.size, Modifier.animateItem()) }
+          itemsIndexed(open, key = { _, m -> m.id }) { _, msg ->
+            QuestionCard(msg, { details = msg.id }, Modifier.animateItem().padding(bottom = 12.dp))
+          }
+        }
+
+        history(days, inArchive = false, actions) { details = it.id }
+
+        if (rest.isNotEmpty()) {
+          item(key = "hint") { SwipeTip("Tap for details · swipe left to archive, right to delete", Modifier.animateItem()) }
         }
       }
     }
+
+    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding())
   }
+
+  details?.let { id -> all.find { it.id == id } }?.let { msg ->
+    MessageDetails(msg, actions) { details = null }
+  }
+}
+
+@Composable
+internal fun SwipeTip(text: String, modifier: Modifier = Modifier) {
+  Text(
+    text,
+    style = MaterialTheme.typography.labelMedium,
+    color = MaterialTheme.colorScheme.outline,
+    textAlign = TextAlign.Center,
+    modifier = modifier.fillMaxWidth().padding(top = 20.dp)
+  )
 }
 
 @Composable
@@ -181,7 +221,7 @@ private fun PulsingDot(online: Boolean) {
 }
 
 @Composable
-private fun SectionHeader(text: String, count: Int?, modifier: Modifier = Modifier) {
+internal fun SectionHeader(text: String, count: Int?, modifier: Modifier = Modifier) {
   Row(modifier.padding(start = 4.dp, top = 18.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (count != null) {
@@ -197,7 +237,7 @@ private fun SectionHeader(text: String, count: Int?, modifier: Modifier = Modifi
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun QuestionCard(msg: Message, modifier: Modifier = Modifier) {
+private fun QuestionCard(msg: Message, onOpen: () -> Unit, modifier: Modifier = Modifier) {
   val context = LocalContext.current
   var draft by rememberSaveable(msg.id) { mutableStateOf("") }
   val send = { if (draft.isNotBlank()) Hub.answer(msg.id, draft.trim()) }
@@ -209,7 +249,7 @@ private fun QuestionCard(msg: Message, modifier: Modifier = Modifier) {
     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
   ) {
     Column(Modifier.padding(18.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
+      Row(Modifier.clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
         Avatar(msg.title.ifEmpty { msg.fromName }, 36.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -267,81 +307,6 @@ private fun QuestionCard(msg: Message, modifier: Modifier = Modifier) {
         }
       )
     }
-  }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun MessageRow(msg: Message, first: Boolean, last: Boolean, modifier: Modifier = Modifier) {
-  val context = LocalContext.current
-  var expanded by rememberSaveable(msg.id) { mutableStateOf(false) }
-  val r = 18.dp
-  val shape = RoundedCornerShape(
-    topStart = if (first) r else 4.dp, topEnd = if (first) r else 4.dp,
-    bottomStart = if (last) r else 4.dp, bottomEnd = if (last) r else 4.dp
-  )
-
-  Column(modifier.padding(bottom = if (last) 0.dp else 2.dp)) {
-    Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
-      Row(
-        Modifier
-          .fillMaxWidth()
-          .combinedClickable(onClick = { expanded = !expanded }, onLongClick = { copy(context, msg.body) })
-          .padding(horizontal = 16.dp, vertical = 14.dp)
-          .animateContentSize()
-      ) {
-        Avatar(msg.title.ifEmpty { msg.fromName })
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              msg.title.ifEmpty { msg.fromName },
-              style = MaterialTheme.typography.titleSmall,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-              shortTime(context, msg.receivedAt, LocalNow.current),
-              style = MaterialTheme.typography.labelMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-          Spacer(Modifier.height(2.dp))
-          Text(
-            msg.body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (expanded) Int.MAX_VALUE else 3,
-            overflow = TextOverflow.Ellipsis
-          )
-
-          when {
-            msg.answer != null -> Status(R.drawable.ic_check, "You replied “${msg.answer}”", MaterialTheme.colorScheme.primary)
-            msg.wantsReply && msg.closed -> Status(R.drawable.ic_close, "Expired without a reply", MaterialTheme.colorScheme.outline)
-          }
-
-          if (expanded && msg.title.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-              "From ${msg.fromName} · long-press to copy",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.outline
-            )
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun Status(icon: Int, text: String, color: Color) {
-  Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-    Icon(painterResource(icon), contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-    Spacer(Modifier.width(6.dp))
-    Text(text, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
   }
 }
 

@@ -12,6 +12,8 @@ object Notifier {
   const val SERVICE_ID = 1
   private const val CHANNEL_MESSAGES = "messages"
   private const val CHANNEL_SERVICE = "service"
+  private const val CHANNEL_UPDATES = "updates"
+  private const val UPDATE_ID = 2
   const val KEY_REPLY = "reply_text"
   private const val GROUP_SERVICE = "service"
 
@@ -20,6 +22,11 @@ object Notifier {
     nm.createNotificationChannel(
       NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
         description = "Messages from your paired computers"
+      }
+    )
+    nm.createNotificationChannel(
+      NotificationChannel(CHANNEL_UPDATES, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        description = "New versions of pearbell"
       }
     )
     nm.createNotificationChannel(
@@ -90,6 +97,43 @@ object Notifier {
     }
 
     nm.notify(notificationId(msg.id), builder.build())
+  }
+
+  fun showUpdate(context: Context, version: String) {
+    createChannels(context)
+    context.getSystemService(NotificationManager::class.java).notify(
+      UPDATE_ID,
+      Notification.Builder(context, CHANNEL_UPDATES)
+        .setSmallIcon(R.drawable.ic_download)
+        .setColor(ACCENT)
+        .setContentTitle("pearbell $version is available")
+        .setContentText("Tap to update")
+        .setContentIntent(openApp(context))
+        .setAutoCancel(true)
+        .build()
+    )
+  }
+
+  // Android wants a tap to confirm the install, and the app is not in front.
+  fun showInstallPrompt(context: Context, version: String, confirm: Intent) {
+    val pi = PendingIntent.getActivity(
+      context, UPDATE_ID, confirm, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    context.getSystemService(NotificationManager::class.java).notify(
+      UPDATE_ID,
+      Notification.Builder(context, CHANNEL_UPDATES)
+        .setSmallIcon(R.drawable.ic_download)
+        .setColor(ACCENT)
+        .setContentTitle("Finish updating pearbell to $version")
+        .setContentText("Tap to install")
+        .setContentIntent(pi)
+        .setAutoCancel(true)
+        .build()
+    )
+  }
+
+  fun cancelUpdate(context: Context) {
+    context.getSystemService(NotificationManager::class.java).cancel(UPDATE_ID)
   }
 
   fun cancel(context: Context, id: String) {

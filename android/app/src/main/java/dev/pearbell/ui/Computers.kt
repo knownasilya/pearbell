@@ -118,7 +118,9 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
-          TextButton(onClick = { clearing = true }, modifier = Modifier.padding(top = 8.dp)) {
+          Spacer(Modifier.height(12.dp))
+          UpdateSettings()
+          TextButton(onClick = { clearing = true }) {
             Text("Clear message history", color = MaterialTheme.colorScheme.error)
           }
         }

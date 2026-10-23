@@ -61,6 +61,7 @@ fun PairScreen(first: Boolean, onBack: () -> Unit, onDone: () -> Unit) {
       }
     }
 
+    UpdateBanner()
     when (val p = pairing) {
       is Pairing.Done -> Success(p.name, onDone)
       else -> Steps(first, p)
