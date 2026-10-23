@@ -9,6 +9,61 @@ pearbell send -t "Claude Code" "Refactor done, 42 tests pass"
 pearbell ask -a "Yes,No" "Push the branch to origin?"   # prints: Yes
 ```
 
+<p align="center">
+  <img src="docs/inbox-light.png" width="270" alt="The pearbell inbox in light mode: an open question with Ship it and Hold buttons, and earlier messages below">
+  &nbsp;
+  <img src="docs/inbox-dark.png" width="270" alt="The same inbox in dark mode">
+</p>
+
+## Quick start
+
+Install the CLI and the app first (see [Install the CLI](#install-the-cli) and [Install the Android app](#install-the-android-app)). Then:
+
+**1. Pair once.** On your computer:
+
+```console
+$ pearbell pair
+█▀▀▀▀▀█ ▄▀▄ █▀▀▀▀▀█
+█ ███ █ ▀█▄ █ ███ █      (a QR code)
+▀▀▀▀▀▀▀ ▀ ▀ ▀▀▀▀▀▀▀
+Scan this in the pearbell app, or paste the code:
+
+  pearbell1:3ideim8m3uw7qwhh…:b7df5544a8114e40…
+
+Waiting for the phone...
+Paired with Pixel 8
+```
+
+In the app, tap **Scan QR code** (or **Enter the code instead** and paste it). The app says "You're paired", and the inbox shows "Connected to" your computer.
+
+**2. Send a notification.** It arrives as a normal Android notification and lands in the inbox.
+
+```console
+$ pearbell send -t "GitHub Actions" "CI passed on main · 3m 12s"
+delivered to Pixel 8
+```
+
+**3. Ask a question and wait.** `ask` blocks until you answer on the phone, then prints the answer to stdout:
+
+```console
+$ pearbell ask -t "Claude Code" -a "Ship it,Hold" "Tests are green. Deploy v0.2.0 to production?"
+delivered to Pixel 8
+Ship it
+```
+
+<p align="center">
+  <img src="docs/notification.png" width="360" alt="An Android notification from Claude Code with Ship it, Hold and Reply buttons">
+</p>
+
+Answer from the notification (tap a button, or **Reply** to type) or from the app's **Waiting for you** card. Only the answer goes to stdout; progress lines go to stderr. So scripts can branch on it:
+
+```bash
+answer=$(pearbell ask -q -a "Ship it,Hold" "Deploy v0.2.0?") || exit 1
+if [ "$answer" = "Ship it" ]; then ./deploy.sh; fi
+```
+
+If nobody answers in time, `ask` exits with code `2` (the default timeout is 10 minutes; change it with `--timeout`).
+
 ## How it works
 
 ```
@@ -49,15 +104,9 @@ Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir`
 
 On first start, allow notifications. Then tap **Allow** on the "run in the background" card. Without it, Android may cut the connection while the screen is off.
 
-## Pair
+## All commands
 
-```bash
-pearbell pair
-```
-
-It prints a QR code. In the app, tap **Scan QR code**, or paste the code below the QR into the text box. You can pair one phone with many computers, and one computer with many phones.
-
-## Use
+You can pair one phone with many computers, and one computer with many phones. `send` and `ask` go to every paired phone unless you pick one with `-d`; the first answer wins, and the other phones close the question.
 
 ```bash
 pearbell send "Build finished"                 # notification
