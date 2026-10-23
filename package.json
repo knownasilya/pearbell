@@ -2,6 +2,23 @@
   "name": "pearbell",
   "version": "0.1.0",
   "description": "Peer-to-peer push messages between a CLI and your Android phone, built on the Pear stack. An ntfy.sh alternative for AI tools.",
+  "keywords": [
+    "pear",
+    "holepunch",
+    "hyperdht",
+    "p2p",
+    "push",
+    "notifications",
+    "ntfy",
+    "android",
+    "cli",
+    "ai-agents",
+    "claude-code"
+  ],
+  "homepage": "https://github.com/knownasilya/pearbell#readme",
+  "bugs": {
+    "url": "https://github.com/knownasilya/pearbell/issues"
+  },
   "type": "module",
   "bin": {
     "pearbell": "cli/bin.js"
@@ -11,7 +28,8 @@
     "fake-phone": "node test/fake-phone.js",
     "android:fetch-bare-kit": "scripts/fetch-bare-kit.sh",
     "android:build": "cd android && ./gradlew assembleRelease",
-    "android:install": "cd android && ./gradlew installDebug"
+    "android:install": "cd android && ./gradlew installDebug",
+    "prepublishOnly": "npm test"
   },
   "license": "Apache-2.0",
   "dependencies": {

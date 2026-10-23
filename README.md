@@ -81,14 +81,14 @@ If nobody answers in time, `ask` exits with code `2` (the default timeout is 10 
 
 ## Install the CLI
 
-You need Node 20 or later. Install straight from GitHub:
+You need Node 20 or later.
 
 ```bash
-npm install -g github:knownasilya/pearbell
+npm install -g pearbell
 pearbell --help
 ```
 
-While the repository is private, this works for anyone whose git can read it (it uses your normal GitHub login). To update, run the same command again. To remove it, run `npm uninstall -g pearbell`.
+To update, run `npm install -g pearbell@latest`. To remove it, run `npm uninstall -g pearbell`.
 
 To hack on it instead, use a clone:
 
