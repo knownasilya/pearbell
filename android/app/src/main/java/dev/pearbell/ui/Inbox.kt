@@ -79,6 +79,11 @@ import dev.pearbell.R
 
 @Composable
 fun InboxScreen(online: Boolean, peers: List<Peer>, messages: List<Message>, onComputers: () -> Unit) {
+  ProvideNow { Inbox(online, peers, messages, onComputers) }
+}
+
+@Composable
+private fun Inbox(online: Boolean, peers: List<Peer>, messages: List<Message>, onComputers: () -> Unit) {
   val open = messages.filter { it.open }
   val rest = messages.filterNot { it.open }
   val context = LocalContext.current
@@ -204,7 +209,7 @@ private fun QuestionCard(msg: Message, modifier: Modifier = Modifier) {
         Column(Modifier.weight(1f)) {
           Text(msg.title.ifEmpty { msg.fromName }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            "${msg.fromName} · ${shortTime(context, msg.receivedAt)}",
+            "${msg.fromName} · ${shortTime(context, msg.receivedAt, LocalNow.current)}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -292,7 +297,7 @@ private fun MessageRow(msg: Message, first: Boolean, last: Boolean, modifier: Mo
             )
             Spacer(Modifier.width(8.dp))
             Text(
-              shortTime(context, msg.receivedAt),
+              shortTime(context, msg.receivedAt, LocalNow.current),
               style = MaterialTheme.typography.labelMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )

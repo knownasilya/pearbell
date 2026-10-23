@@ -15,6 +15,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,6 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.pearbell.R
 import java.util.Calendar
+import kotlinx.coroutines.delay
 
 // A line of shell code with a copy button.
 @Composable
@@ -52,9 +57,23 @@ fun copy(context: Context, text: String) {
   Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
 }
 
+// The current time, ticking every 30 s, so "4m ago" labels stay true.
+val LocalNow = compositionLocalOf { System.currentTimeMillis() }
+
+@Composable
+fun ProvideNow(content: @Composable () -> Unit) {
+  val now by produceState(System.currentTimeMillis()) {
+    while (true) {
+      delay(30_000)
+      value = System.currentTimeMillis()
+    }
+  }
+  CompositionLocalProvider(LocalNow provides now, content = content)
+}
+
 // "now", "4m", "2h", then the clock time.
-fun shortTime(context: Context, at: Long): String {
-  val ago = System.currentTimeMillis() - at
+fun shortTime(context: Context, at: Long, now: Long): String {
+  val ago = now - at
   return when {
     ago < DateUtils.MINUTE_IN_MILLIS -> "now"
     ago < DateUtils.HOUR_IN_MILLIS -> "${ago / DateUtils.MINUTE_IN_MILLIS}m"
