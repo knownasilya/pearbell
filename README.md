@@ -36,7 +36,7 @@ Paired with Pixel 8
 
 In the app, tap **Scan QR code** (or **Enter the code instead** and paste it). The app says "You're paired", and the inbox shows "Connected to" your computer.
 
-**2. Send a notification.** It arrives as a normal Android notification and lands in the inbox.
+**2. Send a notification.** It arrives as a normal Android notification and lands in the inbox. In the app, tap a message to see which computer sent it and exactly when. Swipe left to archive it, right to delete it (both can be undone).
 
 ```console
 $ pearbell send -t "GitHub Actions" "CI passed on main · 3m 12s"
@@ -109,6 +109,10 @@ It needs Android 10 or later. Get the APK one of these ways:
 
 Open the APK on the phone and allow installs from that source. Or, with USB debugging on: `adb install pearbell-*.apk`.
 
+**Updates.** The app checks the GitHub releases every few hours and installs new versions itself. Android asks you to confirm the first update; on Android 12 and later, the ones after that can install without a prompt. Turn this off, or check by hand, on the Computers screen.
+
+> **Coming from v0.1.0?** It was signed with a throwaway key, so it can't update itself. Uninstall it once and install v0.2.0 or later by hand; updates work from then on. (You'll need to pair again.)
+
 On first start, allow notifications. Then tap **Allow** on the "Stay reachable" card. Without it, Android may cut the connection while the screen is off.
 
 ### Build it yourself
@@ -128,7 +132,7 @@ Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir`
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-**Signing.** Android installs an update only if it is signed with the same key as the installed app. Without a key, CI signs each build with a new throwaway key, so you must uninstall the app before you install a newer build. For updates in place, create a key once, keep a backup, and add it as repository secrets:
+**Signing.** Android installs an update only if it is signed with the same key as the installed app, so releases are signed with one long-lived key from the repository secrets below. Never lose or replace it: apps signed with the old key could not update anymore. Without these secrets (in a fork, say), CI signs each build with a new throwaway key. To create a key:
 
 ```bash
 keytool -genkeypair -keystore pearbell.jks -alias pearbell -keyalg RSA -keysize 4096 -validity 10000
