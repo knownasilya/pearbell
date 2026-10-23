@@ -10,7 +10,7 @@
   <application
     android:label="pearbell"
     android:icon="@mipmap/ic_launcher"
-    android:theme="@android:style/Theme.Material.NoActionBar"
+    android:theme="@style/Theme.Pearbell"
     android:allowBackup="false">
 
     <activity

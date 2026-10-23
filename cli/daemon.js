@@ -34,7 +34,8 @@ export class Daemon extends EventEmitter {
 
   async stop () {
     this.cancelPairing()
-    for (const entry of this.messages.values()) clearTimeout(entry.timer)
+    // Nobody can collect a reply after this, so let the phones know.
+    for (const id of [...this.messages.keys()]) this.close(id)
     for (const conn of this.conns.values()) conn.destroy()
     if (this.server) await this.server.close()
   }
@@ -140,6 +141,11 @@ export class Daemon extends EventEmitter {
         this._onack(device, frame.id)
       } else if (frame.type === 'reply') {
         this._onreply(device, conn, frame.id, frame.text)
+      } else if (frame.type === 'pending' && Array.isArray(frame.ids)) {
+        // Questions the phone still shows as open, but that we lost (restart).
+        for (const id of frame.ids.slice(0, 500)) {
+          if (!this.messages.has(id)) writeJSON(conn, { type: 'closed', id })
+        }
       }
     })
   }
@@ -149,6 +155,8 @@ export class Daemon extends EventEmitter {
     this.conns.set(device.publicKey, conn)
     if (old && old !== conn) old.destroy()
     this.emit('connect', device)
+
+    writeJSON(conn, { type: 'hello', name: this.name })
 
     for (const entry of this.messages.values()) {
       if (entry.targets.has(device.publicKey) && !entry.delivered.has(device.publicKey)) {

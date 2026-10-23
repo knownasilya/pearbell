@@ -206,7 +206,7 @@ async function runStop () {
 async function runDaemon () {
   const cfg = config.load()
   const dht = new DHT()
-  const daemon = new Daemon({ dht, keyPair: config.keyPair(cfg), devices: cfg.devices })
+  const daemon = new Daemon({ dht, keyPair: config.keyPair(cfg), devices: cfg.devices, name: config.computerName() })
   const stamp = () => new Date().toISOString()
 
   daemon.on('devices', (devices) => config.save({ ...config.load(), devices }))
@@ -223,7 +223,7 @@ async function runDaemon () {
   })
 
   console.log(`${stamp()} stopping`)
-  server.close()
+  server.closeAll()
   if (process.platform !== 'win32') fs.rmSync(control.socketPath(), { force: true })
   await daemon.stop()
   await dht.destroy()

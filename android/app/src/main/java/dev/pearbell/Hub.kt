@@ -87,14 +87,17 @@ object Hub {
 
   private fun parsePeers(arr: JSONArray) = (0 until arr.length()).map {
     val o = arr.getJSONObject(it)
-    Peer(o.getString("publicKey"), o.optString("name"), o.optLong("pairedAt"), o.optBoolean("connected"))
+    Peer(o.getString("publicKey"), pretty(o.optString("name")), o.optLong("pairedAt"), o.optBoolean("connected"))
   }
+
+  // Older CLIs sent the raw host name, like "Ilyas-MacBook-Pro.local".
+  private fun pretty(name: String) = name.removeSuffix(".local")
 
   fun parseMessage(o: JSONObject): Message {
     val actions = o.optJSONArray("actions")
     return Message(
       id = o.getString("id"),
-      fromName = o.optString("fromName"),
+      fromName = pretty(o.optString("fromName")),
       title = o.optString("title"),
       body = o.optString("body"),
       actions = if (actions == null) emptyList() else (0 until actions.length()).map { actions.getString(it) },

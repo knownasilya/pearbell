@@ -153,19 +153,33 @@ export class Phone {
   _onopen (link) {
     this._emitState()
 
-    // Replies given while we were offline.
+    const pending = []
     for (const msg of this.state.messages) {
-      if (msg.from === link.peer.publicKey && msg.answer !== null && !msg.closed) {
-        link.send({ type: 'reply', id: msg.id, text: msg.answer })
-      }
+      if (msg.from !== link.peer.publicKey || !msg.wantsReply || msg.closed) continue
+      // Replies given while we were offline.
+      if (msg.answer !== null) link.send({ type: 'reply', id: msg.id, text: msg.answer })
+      else pending.push(msg.id)
     }
+    // The computer closes the ones it no longer knows about.
+    if (pending.length) link.send({ type: 'pending', ids: pending })
   }
 
   _onframe (link, frame) {
+    if (frame.type === 'hello') return this._onhello(link, frame)
     if (typeof frame.id !== 'string' || frame.id.length > 64) return
 
     if (frame.type === 'msg') this._onmessage(link, frame)
     else if (frame.type === 'closed') this._onclosed(frame.id)
+  }
+
+  // The computer may have been renamed since pairing.
+  _onhello (link, frame) {
+    const name = typeof frame.name === 'string' ? frame.name.slice(0, 64) : ''
+    if (!name || name === link.peer.name) return
+
+    link.peer.name = name
+    this.save()
+    this._emitState()
   }
 
   _onmessage (link, incoming) {

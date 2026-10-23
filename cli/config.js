@@ -1,5 +1,6 @@
 // CLI identity and paired devices, kept in ~/.config/pearbell/config.json
 // (or $PEARBELL_HOME/config.json).
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -50,4 +51,15 @@ export function findDevices (config, query) {
   if (!query) return config.devices
   const q = query.toLowerCase()
   return config.devices.filter((d) => d.name.toLowerCase() === q || d.publicKey.startsWith(q))
+}
+
+// The name phones show for this computer: "Ilya's MacBook Pro" on macOS.
+export function computerName () {
+  if (process.platform === 'darwin') {
+    try {
+      const name = execFileSync('scutil', ['--get', 'ComputerName'], { encoding: 'utf8' }).trim()
+      if (name) return name
+    } catch {}
+  }
+  return os.hostname().replace(/\.local$/, '')
 }

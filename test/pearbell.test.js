@@ -40,6 +40,16 @@ test('pairing stores both sides and the phone connects', async (t) => {
   t.ok(phone.snapshot().peers[0].connected)
 })
 
+test('the phone picks up a renamed computer', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  daemon.name = 'Studio Mac'
+  daemon.conns.get(device.publicKey).destroy()
+
+  await waitFor(() => phone.state.peers[0].name === 'Studio Mac')
+  t.pass('name updated on reconnect')
+})
+
 test('wrong pairing token is refused', async (t) => {
   const { daemon, phone } = await setup(t)
 
@@ -127,6 +137,21 @@ test('closing an unanswered question tells the phone', async (t) => {
 
   await waitFor(() => phone.findMessage(entry.id).closed)
   t.absent(phone.answer(entry.id, 'too late'))
+})
+
+test('questions lost in a daemon restart get closed on reconnect', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const entry = daemon.send({ message: { body: 'Lost?', actions: [], wantsReply: true }, targets: [device] })
+  await once(entry, 'delivered')
+
+  // Simulate a crash: the daemon forgets without telling anyone.
+  clearTimeout(entry.timer)
+  daemon.messages.delete(entry.id)
+  daemon.conns.get(device.publicKey).destroy()
+
+  await waitFor(() => phone.findMessage(entry.id).closed)
+  t.pass('phone closed the orphaned question')
 })
 
 test('unknown keys cannot connect', async (t) => {

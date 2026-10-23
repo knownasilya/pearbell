@@ -134,8 +134,12 @@ class BellService : Service() {
       "ready" -> {
         Hub.online.value = true
         Hub.applyState(event)
+        Notifier.updateService(this, Hub.peers.value)
       }
-      "state" -> Hub.applyState(event)
+      "state" -> {
+        Hub.applyState(event)
+        Notifier.updateService(this, Hub.peers.value)
+      }
       "message" -> {
         val msg = Hub.parseMessage(event.getJSONObject("message"))
         Hub.upsert(msg)

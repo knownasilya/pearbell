@@ -36,10 +36,19 @@ export async function serve (daemon) {
     fs.unlinkSync(file)
   }
 
+  const socks = new Set()
   const server = net.createServer((sock) => {
+    socks.add(sock)
+    sock.on('close', () => socks.delete(sock))
     sock.on('error', noop)
     onJSON(sock, (req) => handle(daemon, sock, req))
   })
+
+  // Waiting CLI commands would keep the process alive, so hang up on them.
+  server.closeAll = () => {
+    server.close()
+    for (const sock of socks) sock.destroy()
+  }
 
   await new Promise((resolve, reject) => {
     server.once('error', reject)

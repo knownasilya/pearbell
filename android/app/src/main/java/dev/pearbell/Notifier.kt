@@ -13,6 +13,7 @@ object Notifier {
   private const val CHANNEL_MESSAGES = "messages"
   private const val CHANNEL_SERVICE = "service"
   const val KEY_REPLY = "reply_text"
+  private const val GROUP_SERVICE = "service"
 
   fun createChannels(context: Context) {
     val nm = context.getSystemService(NotificationManager::class.java)
@@ -29,18 +30,36 @@ object Notifier {
     )
   }
 
-  fun serviceNotification(context: Context): Notification =
-    Notification.Builder(context, CHANNEL_SERVICE)
+  private const val ACCENT = 0xFF5B7A14.toInt()
+
+  fun serviceNotification(context: Context, peers: List<Peer> = emptyList()): Notification {
+    val up = peers.filter { it.connected }
+    val title = when {
+      peers.isEmpty() -> "Not paired yet"
+      up.isEmpty() -> "Waiting for your computer"
+      up.size == 1 -> "Connected to ${up[0].name}"
+      else -> "Connected to ${up.size} computers"
+    }
+    return Notification.Builder(context, CHANNEL_SERVICE)
       .setSmallIcon(R.drawable.ic_bell)
-      .setContentTitle("Listening for messages")
+      .setColor(ACCENT)
+      .setContentTitle(title)
       .setContentIntent(openApp(context))
+      .setGroup(GROUP_SERVICE)
       .setOngoing(true)
+      .setOnlyAlertOnce(true)
       .build()
+  }
+
+  fun updateService(context: Context, peers: List<Peer>) {
+    context.getSystemService(NotificationManager::class.java).notify(SERVICE_ID, serviceNotification(context, peers))
+  }
 
   fun showMessage(context: Context, msg: Message) {
     val nm = context.getSystemService(NotificationManager::class.java)
     val builder = Notification.Builder(context, CHANNEL_MESSAGES)
       .setSmallIcon(R.drawable.ic_bell)
+      .setColor(ACCENT)
       .setContentTitle(msg.title.ifEmpty { msg.fromName })
       .setContentText(msg.body)
       .setStyle(Notification.BigTextStyle().bigText(msg.body))
