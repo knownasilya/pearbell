@@ -3,6 +3,7 @@ import createTestnet from 'hyperdht/testnet.js'
 import DHT from 'hyperdht'
 import { Phone } from '../shared/phone.js'
 import { Daemon } from '../cli/daemon.js'
+import { clipBody, MAX_BODY } from '../shared/protocol.js'
 
 async function setup (t) {
   const testnet = await createTestnet(3, t.teardown)
@@ -197,6 +198,15 @@ test('topics and long messages reach the phone whole', async (t) => {
   const msg = events.find((e) => e.type === 'message').message
   t.is(msg.topic, 'github-daily')
   t.is(msg.body.length, 15_000, 'no truncation under the 16000 limit')
+})
+
+test('an over-long body is cut with a note, never silently', (t) => {
+  t.is(clipBody('short'), 'short')
+  t.is(clipBody('x'.repeat(MAX_BODY)).length, MAX_BODY, 'the limit itself fits')
+
+  const cut = clipBody('x'.repeat(20_000))
+  t.ok(cut.length <= MAX_BODY)
+  t.ok(cut.endsWith(`… (cut: ${(20_000 - (MAX_BODY - 64)).toLocaleString('en-US')} more characters)`))
 })
 
 test('unknown keys cannot connect', async (t) => {

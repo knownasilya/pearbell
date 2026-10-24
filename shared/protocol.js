@@ -22,6 +22,17 @@ import z32 from 'z32'
 
 export const PAIR_PREFIX = 'pearbell1'
 
+// Longest message body the phone keeps. A longer one is cut with a note at
+// the end, so it never looks complete when it is not.
+export const MAX_BODY = 16_000
+
+export function clipBody (body) {
+  if (body.length <= MAX_BODY) return body
+  const keep = MAX_BODY - 64 // room for the note
+  const note = `\n\n… (cut: ${(body.length - keep).toLocaleString('en-US')} more characters)`
+  return body.slice(0, keep) + note
+}
+
 export function encodePairCode (publicKey, token) {
   return `${PAIR_PREFIX}:${z32.encode(publicKey)}:${b4a.toString(token, 'hex')}`
 }

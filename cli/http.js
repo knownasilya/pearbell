@@ -3,6 +3,7 @@
 // every request needs the token from `pearbell http on`.
 //
 //   POST /send  { body, title?, topic?, actions?, device?, wait?, timeout? }
+//     (a body over 16,000 characters is cut, and the reply has truncated: true)
 //     -> 200 { id, delivered, queued }       without wait
 //     -> 200 { id, reply, device }           with wait
 //     -> 504 { error: 'timeout' }            no reply (or no delivery) in time
@@ -11,9 +12,10 @@ import { timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import * as config from './config.js'
 import { sanitize } from './control.js'
+import { MAX_BODY } from '../shared/protocol.js'
 import { SEND_TTL } from './daemon.js'
 
-const MAX_BODY = 64 * 1024
+const MAX_REQUEST = 64 * 1024
 
 export async function serveHttp (daemon, { port, token }) {
   const server = http.createServer((req, res) => {
@@ -47,6 +49,7 @@ async function handle (daemon, token, req, res) {
 
   const actions = typeof input.actions === 'string' ? input.actions.split(',').map((a) => a.trim()).filter(Boolean) : input.actions
   const message = sanitize({ ...input, actions, wantsReply: input.wait === true })
+  const truncated = typeof input.body === 'string' && input.body.length > MAX_BODY
   if (!message.body.trim()) return reply(res, 400, { error: 'body is required' })
 
   const targets = config.findDevices({ devices: daemon.devices }, input.device)
@@ -66,7 +69,7 @@ async function handle (daemon, token, req, res) {
       if (done) return
       done = true
       clearTimeout(timer)
-      reply(res, status, body)
+      reply(res, status, truncated ? { ...body, truncated } : body)
       resolve()
     }
 
@@ -108,7 +111,7 @@ function readBody (req) {
     const chunks = []
     req.on('data', (c) => {
       size += c.length
-      if (size > MAX_BODY) { reject(new Error('too large')); req.destroy(); return }
+      if (size > MAX_REQUEST) { reject(new Error('too large')); req.destroy(); return }
       chunks.push(c)
     })
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
