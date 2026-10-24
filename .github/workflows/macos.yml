@@ -1,5 +1,8 @@
-# Builds the macOS menu bar app (macos/) on every push and pull request, and
-# on a v* tag attaches pearbell-mac-vX.Y.Z.zip to the GitHub Release.
+# Builds the macOS menu bar app (macos/) on every push and pull request.
+# For a release (a v* tag pushed by hand, or publish.yml dispatching this
+# workflow with the tag as its ref) it attaches pearbell-mac-vX.Y.Z.zip to
+# that tag's GitHub Release: uploaded to the release if it exists (its notes
+# stay as they are), else the release is created.
 name: macOS
 
 on:
@@ -19,17 +22,19 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Build the app
         run: macos/scripts/build-app.sh
         env:
-          PEARBELL_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          PEARBELL_VERSION: ${{ env.TAG }}
 
       - name: Name the zip
         run: |
-          name="pearbell-mac-${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}.zip"
+          name="pearbell-mac-${TAG:-build-$GITHUB_RUN_NUMBER}.zip"
           cp macos/build/pearbell-mac.zip "$name"
           echo "ZIP=$name" >> "$GITHUB_ENV"
 
@@ -38,10 +43,14 @@ jobs:
           name: pearbell-mac
           path: ${{ env.ZIP }}
 
-      - name: Publish the release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ env.ZIP }}
-          # Whichever workflow finishes first creates the release, so both ask for notes.
-          generate_release_notes: true
+      - name: Attach to the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            # The Android run may create it first when a tag is pushed by hand.
+            gh release create "$TAG" "$ZIP" --generate-notes || gh release upload "$TAG" "$ZIP" --clobber
+          fi
