@@ -81,7 +81,7 @@ If nobody answers in time, `ask` exits with code `2` (the default timeout is 10 
 
 ## The Mac menu bar app
 
-On a Mac, the optional menu bar app shows messages as Mac notifications while you are at the Mac, and leaves them to the phone when you step away (screen locked, Mac asleep, or no input for 5 minutes). A question you leave unanswered on the Mac moves on to the phone, and an answer on either closes it on both. See [macos/README.md](macos/README.md).
+On a Mac, the optional menu bar app shows messages as Mac notifications while you are at the Mac, and leaves them to the phone when you step away (screen locked, Mac asleep, or no input for 5 minutes). A question you leave unanswered on the Mac moves on to the phone, and an answer on either closes it on both. Click a notification to open the message; the inbox renders Markdown, filters by topic, and can snooze the Mac for an hour. See [macos/README.md](macos/README.md).
 
 ```console
 $ pearbell send "Build finished"

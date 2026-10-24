@@ -7,6 +7,7 @@ It does not talk to the phone itself. It connects to the pearbell daemon on the 
 | Situation | Where it shows up |
 | --- | --- |
 | You are using the Mac | A Mac notification. The phone stays quiet. |
+| Snoozed from the moon menu | The phone, for an hour or until 8:00 tomorrow. |
 | Screen locked, Mac or displays asleep, or no input for 5 minutes | The phone. The Mac keeps a quiet copy in its inbox. |
 | A message on the Mac, and you step away before you touch the Mac again | It goes to the phone as well, so you see it somewhere. |
 | A question on the Mac, and you step away or leave it for 3 minutes | It goes to the phone as well. Answer on either one; the other closes it. |
@@ -16,7 +17,15 @@ It does not talk to the phone itself. It connects to the pearbell daemon on the 
 
 The menu has **Auto** (the rules above), **Always Mac** and **Always phone**, and you can change the idle time and when questions move on. `pearbell send --to mac|phone|all` and `-d <phone>` override the rules for one message.
 
-The popover is the phone's inbox: open questions on top with their quick replies and a reply field, then recent messages. Notifications for questions carry the same buttons and a Reply field. In System Settings, set pearbell's notification style to **Alerts** so questions stay on screen.
+The popover is the phone's inbox: open questions on top with their quick replies and a reply field, then recent messages. The menu bar icon shows how many questions wait.
+
+- **Open a message:** click its notification, or its row in the inbox, to see all of it, with its topic, time and where it went. Esc goes back.
+- **Markdown:** messages show **bold**, *italic*, `code`, ~~strike~~, headings, lists, quotes and code blocks, like on the phone. Links and bare `https://` URLs open in your browser. Only http, https and mailto links open.
+- **Topics:** messages sent with `-T <topic>` get a tag, and chips under the header filter the inbox by topic. Notifications are grouped by topic too.
+- **Snooze:** the moon menu sends everything to the phone for an hour or until tomorrow morning. **Resume** ends it.
+- **Keys:** ⌘1, ⌘2 and ⌘3 pick the quick replies of the first open question.
+
+Notifications for questions carry the same buttons and a Reply field. In System Settings, set pearbell's notification style to **Alerts** so questions stay on screen. **Send a test message** in the app's settings checks that notifications show.
 
 ## Install
 
