@@ -163,7 +163,7 @@ class BellService : Service() {
       "message" -> {
         val msg = Hub.parseMessage(event.getJSONObject("message"))
         Hub.upsert(msg)
-        Notifier.showMessage(this, msg)
+        if (!Hub.visible) Notifier.showMessage(this, msg)
       }
       "updated" -> {
         val msg = Hub.parseMessage(event.getJSONObject("message"))

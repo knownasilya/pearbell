@@ -50,6 +50,16 @@ class MainActivity : ComponentActivity() {
     handleOpen(intent)
   }
 
+  override fun onStart() {
+    super.onStart()
+    Hub.visible = true
+  }
+
+  override fun onStop() {
+    super.onStop()
+    Hub.visible = false
+  }
+
   override fun onResume() {
     super.onResume()
     Updater.check(this)
