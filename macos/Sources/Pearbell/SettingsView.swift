@@ -117,7 +117,7 @@ struct SettingsView: View {
   private var explanation: String {
     switch model.mode {
     case .auto:
-      return "While you use this Mac, messages show up here. When it is locked, asleep or idle, they go to your phone. A question you leave unanswered here moves on to the phone."
+      return "While you use this Mac, messages show up here. When it is locked, asleep or idle, they go to your phone, and so do the ones you did not see here before you stepped away. A question you leave unanswered here moves on to the phone."
     case .mac:
       return "Everything shows up on this Mac, even when you are away."
     case .phone:

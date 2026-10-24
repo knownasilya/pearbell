@@ -8,6 +8,7 @@ It does not talk to the phone itself. It connects to the pearbell daemon on the 
 | --- | --- |
 | You are using the Mac | A Mac notification. The phone stays quiet. |
 | Screen locked, Mac or displays asleep, or no input for 5 minutes | The phone. The Mac keeps a quiet copy in its inbox. |
+| A message on the Mac, and you step away before you touch the Mac again | It goes to the phone as well, so you see it somewhere. |
 | A question on the Mac, and you step away or leave it for 3 minutes | It goes to the phone as well. Answer on either one; the other closes it. |
 | Away, but no phone online | Both: the phone gets it when it reconnects, and the Mac notification waits for you. |
 | No phone paired | The Mac. |

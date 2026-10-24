@@ -15,6 +15,8 @@
 //   7. Otherwise you are at the Mac, so the Mac. A question there also goes
 //      to the phone if it is still open after escalateAfter seconds (default
 //      3 min), or as soon as you step away (the daemon watches presence).
+//      Any other message follows you to the phone too when you step away
+//      before you touch the Mac again, so you see it somewhere.
 //
 // When the phone wins but none is online, the Mac shows it too, so the
 // message is waiting on whichever screen you see first.
@@ -47,7 +49,8 @@ export function decide ({ wantsReply = false, route = 'auto', presence = null, p
   return {
     to: 'mac',
     reason: 'you are using it',
-    escalateAfter: wantsReply && after > 0 ? after * 1000 : null
+    escalateAfter: wantsReply && after > 0 ? after * 1000 : null,
+    follow: true
   }
 }
 

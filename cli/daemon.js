@@ -9,7 +9,7 @@ import b4a from 'b4a'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { encodePairCode, toHex } from '../shared/protocol.js'
-import { awayReason, decide } from './router.js'
+import { awayReason, decide, idleSeconds } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
 export const SEND_TTL = 24 * 60 * 60 * 1000
@@ -177,6 +177,10 @@ export class Daemon extends EventEmitter {
       this.emit('mac', false)
       // Whatever was waiting on the Mac goes to the phones now.
       for (const entry of [...this.messages.values()]) {
+        if (entry.shownAt) {
+          this.close(entry.id)
+          continue
+        }
         if (!entry.targets.has(MAC) || entry.delivered.has(MAC) && !entry.wantsReply) continue
         if (!entry.delivered.has(MAC)) entry.targets.delete(MAC)
         this.escalate(entry.id, 'the menu bar app quit')
@@ -218,13 +222,21 @@ export class Daemon extends EventEmitter {
       at: Date.now()
     }
 
-    // Stepped away with a question open on the Mac: hand it to the phones.
+    // Stepped away with a question open on the Mac, or before you touched the
+    // Mac after a message showed there: hand it to the phones.
     const presence = this.mac.presence
-    if (presence.mode === 'mac') return
-    const away = presence.mode === 'phone' ? 'set to Always phone' : awayReason(presence)
-    if (!away) return
+    const away = presence.mode === 'mac'
+      ? null
+      : presence.mode === 'phone' ? 'set to Always phone' : awayReason(presence)
+    const now = Date.now()
     for (const entry of [...this.messages.values()]) {
-      if (entry.wantsReply && entry.targets.has(MAC)) this.escalate(entry.id, away)
+      if (entry.shownAt) {
+        const seen = idleSeconds(presence, now) < (now - entry.shownAt) / 1000
+        if (seen || presence.mode === 'mac') this.close(entry.id)
+        else if (away) this._follow(entry, away)
+      } else if (away && entry.wantsReply && entry.targets.has(MAC)) {
+        this.escalate(entry.id, away)
+      }
     }
   }
 
@@ -334,7 +346,18 @@ export class Daemon extends EventEmitter {
     entry.delivered.add(device.publicKey)
     entry.emit('delivered', device)
 
-    if (!entry.wantsReply && entry.delivered.size === entry.targets.size) this.close(id)
+    if (entry.wantsReply || entry.delivered.size < entry.targets.size) return
+    // Shown on the Mac while you use it: keep it until you touch the Mac again
+    // (seen) or step away (it goes to the phones), see setPresence.
+    if (entry.route.follow && device === MAC_DEVICE) entry.shownAt = Date.now()
+    else this.close(id)
+  }
+
+  // A message you have not seen on the Mac goes on to the phones.
+  _follow (entry, reason) {
+    entry.shownAt = null
+    this.escalate(entry.id, `not seen on the Mac, ${reason}`)
+    if (entry.delivered.size === entry.targets.size) this.close(entry.id)
   }
 
   _onreply (device, conn, id, text) {

@@ -139,6 +139,41 @@ test('mac: answering on the Mac closes the question on the phone', async (t) => 
   t.pass('phone closed it')
 })
 
+test('mac: a message you do not see on the Mac follows you to the phone', async (t) => {
+  const { daemon, device, phoneMessages } = await setup(t)
+  const mac = await connectMac(t, { idle: 0, idleAfter: 300 })
+
+  const entry = daemon.send({ message: { body: 'Tests passed', actions: [], wantsReply: false }, targets: [device] })
+  t.is(entry.route.to, 'mac')
+  await once(entry, 'delivered')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  const routed = once(entry, 'routed')
+  mac.presence({ idle: 300, idleAfter: 300 })
+  const r = await routed
+  t.is(r.to, 'both')
+  t.is(r.reason, 'not seen on the Mac, the Mac has been idle for 5 min')
+  t.is((await once(entry, 'delivered')).name, 'pixel')
+  await waitFor(() => phoneMessages.length)
+  t.absent(daemon.messages.has(entry.id), 'done once the phone has it')
+})
+
+test('mac: a message stays on the Mac once you touch the Mac after it showed', async (t) => {
+  const { daemon, device, phoneMessages } = await setup(t)
+  const mac = await connectMac(t, { idle: 0, idleAfter: 300 })
+
+  const entry = daemon.send({ message: { body: 'Tests passed', actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+  t.ok(daemon.messages.has(entry.id), 'kept until you touch the Mac')
+  await new Promise((resolve) => setTimeout(resolve, 1100))
+
+  mac.presence({ idle: 0, idleAfter: 300 })
+  await waitFor(() => !daemon.messages.has(entry.id))
+  mac.presence({ idle: 0, locked: true })
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  t.is(phoneMessages.length, 0, 'the phone stays quiet')
+})
+
 test('mac: an unanswered question escalates after escalateAfter', async (t) => {
   const { daemon, device, phoneMessages } = await setup(t)
   await connectMac(t, { idle: 0, escalateAfter: 1 })
