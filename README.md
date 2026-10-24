@@ -119,7 +119,7 @@ It needs Android 10 or later. Get the APK one of these ways:
 
 Open the APK on the phone and allow installs from that source. Or, with USB debugging on: `adb install pearbell-*.apk`.
 
-**Updates.** The app checks the GitHub releases every few hours and installs new versions itself. Android asks you to confirm the first update; on Android 12 and later, the ones after that can install without a prompt. Turn this off, or check by hand, on the Computers screen.
+**Updates.** The app checks the GitHub releases every hour and installs new versions itself. Android asks you to confirm the first update; on Android 12 and later, the ones after that can install without a prompt. Turn this off, or check by hand, on the Computers screen.
 
 > **Coming from v0.1.0?** It was signed with a throwaway key, so it can't update itself. Uninstall it once and install v0.2.0 or later by hand; updates work from then on. (You'll need to pair again.)
 
@@ -189,7 +189,7 @@ Give messages a topic (`-T builds`, or `"topic": "builds"` in the HTTP API) to g
 
 ### Long messages
 
-A message can hold up to 16,000 characters. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
+A message can hold up to 16,000 characters. A longer one is cut with a "… (cut: N more characters)" note at the end, the CLI warns about it, and the HTTP API adds `"truncated": true` to its reply. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
 
 ### Markdown
 

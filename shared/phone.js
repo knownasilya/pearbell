@@ -7,10 +7,9 @@
 import DHT from 'hyperdht'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from './lines.js'
-import { decodePairCode, opened, toHex, fromHex } from './protocol.js'
+import { clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
 
 const MAX_MESSAGES = 200
-const MAX_BODY = 16_000
 const MAX_TOPIC = 40
 const PAIR_TIMEOUT = 30_000
 const MIN_RETRY = 1_000
@@ -238,7 +237,7 @@ export class Phone {
         from: link.peer.publicKey,
         fromName: link.peer.name,
         title: str(incoming.title, 200),
-        body: str(incoming.body, MAX_BODY),
+        body: clipBody(str(incoming.body, Infinity)),
         topic: str(incoming.topic, MAX_TOPIC).trim(),
         actions: Array.isArray(incoming.actions) ? incoming.actions.slice(0, 3).map((a) => str(a, 40)) : [],
         wantsReply: incoming.wantsReply === true,
