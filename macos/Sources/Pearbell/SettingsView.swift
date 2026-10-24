@@ -87,12 +87,22 @@ struct SettingsView: View {
             .tint(Palette.primary)
             .font(.system(size: 13))
 
-            Button("Notification settings…") {
-              if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
-                NSWorkspace.shared.open(url)
+            HStack(spacing: 8) {
+              Button("Send a test message") { model.sendTest() }
+                .buttonStyle(PillButtonStyle(filled: false))
+                .disabled(model.link != .connected)
+              Button("Notification settings…") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                  NSWorkspace.shared.open(url)
+                }
               }
+              .buttonStyle(PillButtonStyle(filled: false))
             }
-            .buttonStyle(PillButtonStyle(filled: false))
+            if let error = model.testError {
+              Text(error)
+                .font(.system(size: 11))
+                .foregroundStyle(Palette.tertiary)
+            }
             Text("Pick the Alerts style there so questions stay on screen with their buttons.")
               .font(.system(size: 11))
               .foregroundStyle(Palette.onSurfaceVariant)

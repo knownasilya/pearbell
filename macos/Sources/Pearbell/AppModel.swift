@@ -39,6 +39,7 @@ final class AppModel: ObservableObject {
   // Why new messages go to the phone right now, or nil when they come here.
   @Published private(set) var away: String?
   @Published var startError: String?
+  @Published private(set) var testError: String?
 
   @Published var mode: Mode { didSet { saveSettings() } }
   @Published var idleAfter: Double { didSet { saveSettings() } }
@@ -147,21 +148,32 @@ final class AppModel: ObservableObject {
   // Start the daemon through the CLI, from a login shell so PATH has npm's bin.
   func startDaemon() {
     startError = nil
+    pearbell("start") { [weak self] ok in
+      if !ok { self?.startError = "Could not run pearbell. Install it with: npm install -g pearbell" }
+      self?.daemon.kick()
+    }
+  }
+
+  // A message through the daemon to this Mac, to check that notifications show.
+  func sendTest() {
+    testError = nil
+    pearbell("send --to mac -t pearbell 'This is a test message. Notifications work.'") { [weak self] ok in
+      if !ok { self?.testError = "The test message did not reach this Mac. Is the daemon up to date?" }
+    }
+  }
+
+  // Runs the CLI in a login shell, so it finds it the way a terminal does.
+  private func pearbell(_ arguments: String, done: @escaping (Bool) -> Void) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    process.arguments = ["-lc", "pearbell start"]
-    process.terminationHandler = { [weak self] p in
-      DispatchQueue.main.async {
-        if p.terminationStatus != 0 {
-          self?.startError = "Could not run pearbell. Install it with: npm install -g pearbell"
-        }
-        self?.daemon.kick()
-      }
+    process.arguments = ["-lc", "pearbell \(arguments)"]
+    process.terminationHandler = { p in
+      DispatchQueue.main.async { done(p.terminationStatus == 0) }
     }
     do {
       try process.run()
     } catch {
-      startError = error.localizedDescription
+      done(false)
     }
   }
 
