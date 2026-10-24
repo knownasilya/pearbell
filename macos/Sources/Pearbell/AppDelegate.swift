@@ -1,0 +1,60 @@
+import AppKit
+import Combine
+import SwiftUI
+
+// The menu bar item and its popover.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+  let model = AppModel()
+  private var item: NSStatusItem!
+  private let popover = NSPopover()
+  private var changes: AnyCancellable?
+
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    item.button?.target = self
+    item.button?.action = #selector(toggle)
+
+    popover.behavior = .transient
+    popover.animates = true
+    popover.contentSize = NSSize(width: 380, height: 580)
+    popover.contentViewController = NSHostingController(rootView: PopoverView().environmentObject(model))
+
+    model.onOpen = { [weak self] in self?.show() }
+    // objectWillChange fires before the change lands, so look a beat later.
+    changes = model.objectWillChange
+      .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
+      .sink { [weak self] _ in self?.updateIcon() }
+    updateIcon()
+    model.start()
+  }
+
+  @objc private func toggle() {
+    if popover.isShown {
+      popover.performClose(nil)
+    } else {
+      show()
+    }
+  }
+
+  private func show() {
+    guard let button = item.button else { return }
+    NSApp.activate(ignoringOtherApps: true)
+    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    popover.contentViewController?.view.window?.makeKey()
+  }
+
+  private func updateIcon() {
+    let symbol: String
+    if model.link != .connected {
+      symbol = "bell.slash"
+    } else if !model.waiting.isEmpty {
+      symbol = "bell.badge"
+    } else {
+      symbol = "bell"
+    }
+    let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "pearbell")
+    image?.isTemplate = true
+    item.button?.image = image
+    item.button?.toolTip = model.waiting.isEmpty ? "pearbell" : "pearbell: \(model.waiting.count) waiting for you"
+  }
+}

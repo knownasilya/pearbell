@@ -20,6 +20,8 @@ Usage:
   pearbell unpair <name|key>         Forget a phone
   pearbell daemon                    Run the background daemon in the
                                      foreground (other commands start it)
+  pearbell start                     Start the background daemon if it is
+                                     not running (the menu bar app uses it)
   pearbell stop                      Stop the background daemon
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
@@ -32,6 +34,10 @@ Options for send and ask:
   -T, --topic <topic>                Group messages under a topic in the app
   -a, --actions <a,b,c>              Up to 3 quick-reply buttons
   -d, --device <name|key>            Only this phone (default: all)
+      --to <auto|mac|phone|all>      Where to show it. auto (default) uses
+                                     the Mac while you are at it and the
+                                     phone when you step away (needs the
+                                     menu bar app, see macos/)
   -w, --wait                         Wait for a reply (same as ask)
       --timeout <seconds>            How long to wait
                                      (send: 10 for delivery, ask: 600, 0 = never)
@@ -49,6 +55,7 @@ const { values: opts, positionals } = parseArgs({
     topic: { type: 'string', short: 'T' },
     actions: { type: 'string', short: 'a' },
     device: { type: 'string', short: 'd' },
+    to: { type: 'string' },
     wait: { type: 'boolean', short: 'w' },
     timeout: { type: 'string' },
     json: { type: 'boolean' },
@@ -85,6 +92,7 @@ async function run () {
     case 'devices': return runDevices()
     case 'unpair': return runUnpair()
     case 'daemon': return runDaemon()
+    case 'start': return runStart()
     case 'stop': return runStop()
     case 'http': return runHttp()
     case 'service': return runService()
@@ -119,6 +127,8 @@ async function runSend (wantsReply) {
   const seconds = opts.timeout === undefined ? (wantsReply ? 600 : 10) : Number(opts.timeout)
   if (!Number.isFinite(seconds) || seconds < 0) throw new Error('--timeout takes a number of seconds')
 
+  if (opts.to && !control.ROUTES.includes(opts.to)) throw new Error(`--to takes one of ${control.ROUTES.join(', ')}`)
+
   const actions = opts.actions ? opts.actions.split(',').map((a) => a.trim()).filter(Boolean) : []
   const message = { title: opts.title || '', topic: opts.topic || '', body, actions, wantsReply }
 
@@ -133,10 +143,13 @@ async function runSend (wantsReply) {
     ? setTimeout(() => { timedOut = true; sock.end() }, seconds * 1000)
     : null
 
-  await control.request(sock, { type: 'send', message, device: opts.device, timeout: seconds * 1000 || undefined }, (frame) => {
-    if (frame.type === 'queued') {
-      queued = frame
-      const offline = frame.targets.filter((n) => !frame.connected.includes(n))
+  await control.request(sock, { type: 'send', message, device: opts.device, route: opts.to, timeout: seconds * 1000 || undefined }, (frame) => {
+    if (frame.type === 'queued' || frame.type === 'routed') {
+      queued = { ...queued, ...frame }
+      if (frame.type === 'routed' || frame.reason !== 'the menu bar app is not running') {
+        log(frame.type === 'routed' ? `also sent to the phone: ${frame.reason}` : `routed to ${where(frame.route)}: ${frame.reason}`)
+      }
+      const offline = frame.targets.filter((n) => !frame.connected.includes(n) && !delivered.has(n))
       if (offline.length) log(`waiting for ${offline.join(', ')} to connect`)
     } else if (frame.type === 'delivered') {
       delivered.add(frame.device)
@@ -163,7 +176,7 @@ async function runSend (wantsReply) {
 
   const missing = queued.targets.filter((n) => !delivered.has(n))
   if (missing.length) log(`${missing.join(', ')} offline; the message waits in the queue`)
-  if (opts.json) console.log(JSON.stringify({ id: queued.id, delivered: [...delivered], queued: missing }))
+  if (opts.json) console.log(JSON.stringify({ id: queued.id, route: queued.route, delivered: [...delivered], queued: missing }))
   return 0
 }
 
@@ -202,6 +215,12 @@ async function runUnpair () {
   } catch {}
 
   for (const d of matches) console.log(`Forgot ${d.name}`)
+  return 0
+}
+
+async function runStart () {
+  ;(await control.connect()).end()
+  console.log('Daemon running')
   return 0
 }
 
@@ -359,6 +378,10 @@ async function runDaemon () {
   return 0
 }
 
+
+function where (route) {
+  return { mac: 'the Mac', phone: 'the phone', both: 'the Mac and the phone' }[route] || route
+}
 
 function daemonError (frame) {
   const err = new Error(frame?.error || 'The daemon closed the connection')

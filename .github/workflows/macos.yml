@@ -1,0 +1,45 @@
+# Builds the macOS menu bar app (macos/) on every push and pull request, and
+# on a v* tag attaches pearbell-mac-vX.Y.Z.zip to the GitHub Release.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the app
+        run: macos/scripts/build-app.sh
+        env:
+          PEARBELL_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
+      - name: Name the zip
+        run: |
+          name="pearbell-mac-${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}.zip"
+          cp macos/build/pearbell-mac.zip "$name"
+          echo "ZIP=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pearbell-mac
+          path: ${{ env.ZIP }}
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}

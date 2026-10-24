@@ -1,5 +1,7 @@
 // The computer side. A HyperDHT server on the CLI's key pair that paired
 // phones keep a connection to. Messages queue here until each phone has them.
+// The macOS menu bar app, when it runs, connects over the local socket and
+// gets every message too; router.js decides which side shows it.
 import { EventEmitter } from 'node:events'
 import { timingSafeEqual } from 'node:crypto'
 import os from 'node:os'
@@ -7,9 +9,14 @@ import b4a from 'b4a'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { encodePairCode, toHex } from '../shared/protocol.js'
+import { awayReason, decide } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
 export const SEND_TTL = 24 * 60 * 60 * 1000
+
+// The menu bar app's place in a message's targets, next to phone keys.
+export const MAC = 'mac'
+const MAC_DEVICE = { publicKey: MAC, name: 'this Mac', mac: true }
 
 export class Daemon extends EventEmitter {
   constructor ({ dht, keyPair, devices = [], name = os.hostname() }) {
@@ -22,6 +29,7 @@ export class Daemon extends EventEmitter {
     this.conns = new Map()
     this.messages = new Map()
     this.pairing = null
+    this.mac = null // { conn, presence } while the menu bar app is connected
   }
 
   async start () {
@@ -37,6 +45,7 @@ export class Daemon extends EventEmitter {
     // Nobody can collect a reply after this, so let the phones know.
     for (const id of [...this.messages.keys()]) this.close(id)
     for (const conn of this.conns.values()) conn.destroy()
+    if (this.mac) this.mac.conn.destroy()
     if (this.server) await this.server.close()
   }
 
@@ -54,6 +63,21 @@ export class Daemon extends EventEmitter {
     for (const [publicKey, conn] of this.conns) {
       if (!this.findDevice(publicKey)) conn.destroy()
     }
+    this._macState()
+  }
+
+  // What the router knows about the Mac: null when the app is not running.
+  presence () {
+    return this.mac ? (this.mac.presence || {}) : null
+  }
+
+  // Names of the places a message goes to, phones and the Mac.
+  targetsOf (entry) {
+    return [...entry.targets].map((key) => key === MAC ? MAC_DEVICE : this.findDevice(key)).filter(Boolean)
+  }
+
+  isTargetConnected (key) {
+    return key === MAC ? this.mac !== null : this.isConnected(key)
   }
 
   // Accept one phone that shows the token. Returns the code to show the user.
@@ -79,38 +103,161 @@ export class Daemon extends EventEmitter {
     this.pairing = null
   }
 
-  // Queue a message for some devices. The returned emitter fires
-  // 'delivered' (device) and 'reply' ({ text, device }).
-  send ({ message, targets, ttl = SEND_TTL }) {
+  // Queue a message for some phones, or the Mac (see router.js). The returned
+  // emitter fires 'delivered' (device), 'reply' ({ text, device }) and
+  // 'routed' ({ to, reason }) when a question moves on to the phones.
+  send ({ message, targets, ttl = SEND_TTL, route = 'auto' }) {
     const id = toHex(crypto.randomBytes(8))
     const entry = new EventEmitter()
     entry.id = id
     entry.frame = { type: 'msg', id, ...message }
     entry.wantsReply = message.wantsReply === true
-    entry.targets = new Set(targets.map((d) => d.publicKey))
+    entry.phones = targets
+    entry.targets = new Set()
     entry.delivered = new Set()
+    entry.sentAt = Date.now()
     entry.timer = setTimeout(() => this.close(id), ttl)
+    entry.route = decide({
+      wantsReply: entry.wantsReply,
+      route,
+      presence: this.presence(),
+      phones: targets.map((d) => ({ connected: this.isConnected(d.publicKey) }))
+    })
 
     this.messages.set(id, entry)
-    for (const publicKey of entry.targets) {
-      const conn = this.conns.get(publicKey)
-      if (conn) writeJSON(conn, entry.frame)
+    if (entry.route.to !== 'mac') this._addPhones(entry)
+    if (entry.route.to !== 'phone' && this.mac) entry.targets.add(MAC)
+    // The Mac keeps a copy of everything for its inbox, shown quietly when
+    // the message went to the phone.
+    if (this.mac) this._toMac(entry)
+    if (entry.route.escalateAfter) {
+      entry.escalation = setTimeout(() => this.escalate(id, 'no answer on the Mac yet'), entry.route.escalateAfter)
     }
     return entry
   }
 
+  // Send a message routed to the Mac on to the phones as well.
+  escalate (id, reason) {
+    const entry = this.messages.get(id)
+    if (!entry) return
+    clearTimeout(entry.escalation)
+    if (!this._addPhones(entry).length) return
+
+    entry.route = { to: entry.targets.has(MAC) ? 'both' : 'phone', reason, escalateAfter: null }
+    entry.emit('routed', entry.route)
+    this._writeMac({ type: 'routed', id, to: entry.route.to, reason })
+  }
+
   // Forget a message and tell the phones nobody waits for it.
-  close (id) {
+  close (id, answer = null) {
     const entry = this.messages.get(id)
     if (!entry) return
     this.messages.delete(id)
     clearTimeout(entry.timer)
+    clearTimeout(entry.escalation)
 
     if (!entry.wantsReply) return
     for (const publicKey of entry.targets) {
       const conn = this.conns.get(publicKey)
       if (conn) writeJSON(conn, { type: 'closed', id })
     }
+    this._writeMac({ type: 'closed', id, ...(answer ? { answer: answer.text, device: answer.device.name } : {}) })
+  }
+
+  // The menu bar app connected over the local socket. Only one at a time.
+  attachMac (conn, presence) {
+    if (this.mac) this.mac.conn.destroy()
+    const mac = { conn, presence: null }
+    this.mac = mac
+    this.setPresence(presence)
+
+    conn.on('close', () => {
+      if (this.mac !== mac) return
+      this.mac = null
+      this.emit('mac', false)
+      // Whatever was waiting on the Mac goes to the phones now.
+      for (const entry of [...this.messages.values()]) {
+        if (!entry.targets.has(MAC) || entry.delivered.has(MAC) && !entry.wantsReply) continue
+        if (!entry.delivered.has(MAC)) entry.targets.delete(MAC)
+        this.escalate(entry.id, 'the menu bar app quit')
+        if (!entry.wantsReply && entry.delivered.size === entry.targets.size) this.close(entry.id)
+      }
+    })
+
+    this.emit('mac', true)
+    this._macState()
+    // Questions still open show up in the app's inbox again; the app closes
+    // the ones it shows that we no longer know (a daemon restart).
+    const open = []
+    for (const entry of this.messages.values()) {
+      if (!entry.wantsReply) continue
+      this._toMac(entry)
+      open.push(entry.id)
+    }
+    this._writeMac({ type: 'synced', open })
+  }
+
+  // A frame from the menu bar app: presence, ack or reply.
+  onMacFrame (conn, frame) {
+    if (!this.mac || this.mac.conn !== conn) return
+    if (frame.type === 'presence') this.setPresence(frame)
+    else if (frame.type === 'ack') this._onack(MAC_DEVICE, String(frame.id))
+    else if (frame.type === 'reply') this._onreply(MAC_DEVICE, null, String(frame.id), frame.text)
+  }
+
+  setPresence (p = {}) {
+    if (!this.mac) return
+    const num = (v) => Number.isFinite(v) && v >= 0 ? v : undefined
+    this.mac.presence = {
+      idle: num(p.idle) ?? 0,
+      locked: p.locked === true,
+      asleep: p.asleep === true,
+      mode: ['auto', 'mac', 'phone'].includes(p.mode) ? p.mode : 'auto',
+      idleAfter: num(p.idleAfter),
+      escalateAfter: num(p.escalateAfter),
+      at: Date.now()
+    }
+
+    // Stepped away with a question open on the Mac: hand it to the phones.
+    const presence = this.mac.presence
+    if (presence.mode === 'mac') return
+    const away = presence.mode === 'phone' ? 'set to Always phone' : awayReason(presence)
+    if (!away) return
+    for (const entry of [...this.messages.values()]) {
+      if (entry.wantsReply && entry.targets.has(MAC)) this.escalate(entry.id, away)
+    }
+  }
+
+  // Add the message's phones to its targets and send it to those online.
+  _addPhones (entry) {
+    const added = entry.phones.filter((d) => !entry.targets.has(d.publicKey))
+    for (const d of added) {
+      entry.targets.add(d.publicKey)
+      const conn = this.conns.get(d.publicKey)
+      if (conn) writeJSON(conn, entry.frame)
+    }
+    return added
+  }
+
+  _toMac (entry) {
+    this._writeMac({
+      ...entry.frame,
+      notify: entry.targets.has(MAC) && !entry.delivered.has(MAC),
+      route: { to: entry.route.to, reason: entry.route.reason },
+      sentAt: entry.sentAt
+    })
+  }
+
+  _writeMac (frame) {
+    if (this.mac) writeJSON(this.mac.conn, frame)
+  }
+
+  _macState () {
+    this._writeMac({
+      type: 'state',
+      computer: this.name,
+      devices: this.devices.map((d) => ({ name: d.name, publicKey: d.publicKey, connected: this.isConnected(d.publicKey) }))
+    })
   }
 
   _onconnection (conn) {
@@ -123,6 +270,7 @@ export class Daemon extends EventEmitter {
       if (this.conns.get(publicKey) !== conn) return
       this.conns.delete(publicKey)
       this.emit('disconnect', this.findDevice(publicKey))
+      this._macState()
     })
 
     onJSON(conn, (frame) => {
@@ -159,6 +307,7 @@ export class Daemon extends EventEmitter {
     if (!clean || clean === device.name) return
     device.name = clean
     this.emit('devices', this.devices)
+    this._macState()
   }
 
   _attach (device, conn) {
@@ -166,6 +315,7 @@ export class Daemon extends EventEmitter {
     this.conns.set(device.publicKey, conn)
     if (old && old !== conn) old.destroy()
     this.emit('connect', device)
+    this._macState()
 
     writeJSON(conn, { type: 'hello', name: this.name })
 
@@ -178,7 +328,8 @@ export class Daemon extends EventEmitter {
 
   _onack (device, id) {
     const entry = this.messages.get(id)
-    if (!entry || entry.delivered.has(device.publicKey)) return
+    // The Mac acks its quiet copies too; only count it where it was a target.
+    if (!entry || !entry.targets.has(device.publicKey) || entry.delivered.has(device.publicKey)) return
 
     entry.delivered.add(device.publicKey)
     entry.emit('delivered', device)
@@ -191,12 +342,13 @@ export class Daemon extends EventEmitter {
 
     // Expired, answered elsewhere, or from before a restart: stop the resends.
     if (!entry || !entry.wantsReply) {
-      writeJSON(conn, { type: 'closed', id })
+      writeJSON(conn || this.mac.conn, { type: 'closed', id })
       return
     }
 
-    entry.emit('reply', { text: String(text), device })
-    this.close(id)
+    const answer = { text: String(text), device }
+    entry.emit('reply', answer)
+    this.close(id, answer)
   }
 
   _onpair (conn, publicKey, frame) {
@@ -217,6 +369,7 @@ export class Daemon extends EventEmitter {
 
     this.devices = this.devices.filter((d) => d.publicKey !== publicKey).concat(device)
     this.emit('devices', this.devices)
+    this._macState()
 
     clearTimeout(pairing.timer)
     this.pairing = null

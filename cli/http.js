@@ -2,15 +2,15 @@
 // (a Kody job, a CI webhook relay, Shortcuts). Listens on 127.0.0.1 only, and
 // every request needs the token from `pearbell http on`.
 //
-//   POST /send  { body, title?, topic?, actions?, device?, wait?, timeout? }
-//     -> 200 { id, delivered, queued }       without wait
+//   POST /send  { body, title?, topic?, actions?, device?, to?, wait?, timeout? }
+//     -> 200 { id, route, delivered, queued } without wait
 //     -> 200 { id, reply, device }           with wait
 //     -> 504 { error: 'timeout' }            no reply (or no delivery) in time
 //   GET /devices -> [{ name, publicKey, connected }]
 import { timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import * as config from './config.js'
-import { sanitize } from './control.js'
+import { ROUTES, noTarget, sanitize } from './control.js'
 import { SEND_TTL } from './daemon.js'
 
 const MAX_BODY = 64 * 1024
@@ -49,16 +49,18 @@ async function handle (daemon, token, req, res) {
   const message = sanitize({ ...input, actions, wantsReply: input.wait === true })
   if (!message.body.trim()) return reply(res, 400, { error: 'body is required' })
 
-  const targets = config.findDevices({ devices: daemon.devices }, input.device)
-  if (!targets.length) {
-    return reply(res, 400, { error: input.device ? `no paired phone matches "${input.device}"` : 'no phone paired yet' })
-  }
+  if (input.to !== undefined && !ROUTES.includes(input.to)) return reply(res, 400, { error: `to must be one of ${ROUTES.join(', ')}` })
 
+  const targets = config.findDevices({ devices: daemon.devices }, input.device)
+  const error = noTarget(daemon, targets, input.device)
+  if (error) return reply(res, 400, { error })
+
+  const route = input.device ? 'phone' : input.to || 'auto'
   const seconds = Number.isFinite(input.timeout) && input.timeout >= 0 ? input.timeout : (message.wantsReply ? 600 : 10)
-  const entry = daemon.send({ message, targets, ttl: message.wantsReply && seconds > 0 ? seconds * 1000 : SEND_TTL })
+  const entry = daemon.send({ message, targets, route, ttl: message.wantsReply && seconds > 0 ? seconds * 1000 : SEND_TTL })
   const delivered = new Set()
-  const names = () => targets.filter((d) => delivered.has(d.publicKey)).map((d) => d.name)
-  const missing = () => targets.filter((d) => !delivered.has(d.publicKey)).map((d) => d.name)
+  const names = () => daemon.targetsOf(entry).filter((d) => delivered.has(d.publicKey)).map((d) => d.name)
+  const missing = () => daemon.targetsOf(entry).filter((d) => !delivered.has(d.publicKey)).map((d) => d.name)
 
   await new Promise((resolve) => {
     let done = false
@@ -77,14 +79,14 @@ async function handle (daemon, token, req, res) {
           finish(504, { id: entry.id, error: 'timeout', delivered: names() })
         } else {
           // Not delivered yet: it stays queued, as with `pearbell send`.
-          finish(200, { id: entry.id, delivered: names(), queued: missing() })
+          finish(200, { id: entry.id, route: entry.route.to, delivered: names(), queued: missing() })
         }
       }, seconds * 1000)
       : null
 
     entry.on('delivered', (d) => {
       delivered.add(d.publicKey)
-      if (!message.wantsReply && delivered.size === targets.length) finish(200, { id: entry.id, delivered: names(), queued: [] })
+      if (!message.wantsReply && delivered.size === entry.targets.size) finish(200, { id: entry.id, route: entry.route.to, delivered: names(), queued: [] })
     })
     entry.on('reply', ({ text, device }) => finish(200, { id: entry.id, reply: text, device: device.name }))
 
