@@ -47,9 +47,31 @@ struct Message: Codable, Identifiable, Equatable {
   var answer: String?
   var answeredBy: String?
   var closed: Bool
+  var archived = false
 
   var sender: String { title.isEmpty ? "pearbell" : title }
-  var waiting: Bool { wantsReply && answer == nil && !closed }
+  // An open question in the inbox. An archived one stays open but out of the way.
+  var waiting: Bool { wantsReply && answer == nil && !closed && !archived }
+}
+
+extension Message {
+  // Inboxes saved before archiving have no "archived".
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(String.self, forKey: .id)
+    title = try c.decode(String.self, forKey: .title)
+    body = try c.decode(String.self, forKey: .body)
+    topic = try c.decodeIfPresent(String.self, forKey: .topic) ?? ""
+    actions = try c.decode([String].self, forKey: .actions)
+    wantsReply = try c.decode(Bool.self, forKey: .wantsReply)
+    receivedAt = try c.decode(Date.self, forKey: .receivedAt)
+    route = try c.decode(String.self, forKey: .route)
+    reason = try c.decode(String.self, forKey: .reason)
+    answer = try c.decodeIfPresent(String.self, forKey: .answer)
+    answeredBy = try c.decodeIfPresent(String.self, forKey: .answeredBy)
+    closed = try c.decode(Bool.self, forKey: .closed)
+    archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+  }
 }
 
 // The inbox on disk, in ~/Library/Application Support/pearbell.

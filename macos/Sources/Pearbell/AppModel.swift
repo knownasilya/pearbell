@@ -50,9 +50,19 @@ final class AppModel: ObservableObject {
   var onOpen: () -> Void = {}
 
   var waiting: [Message] { messages.filter(\.waiting) }
-  var recent: [Message] { messages.filter { !$0.waiting } }
+  var recent: [Message] { messages.filter { !$0.waiting && !$0.archived } }
   var shownWaiting: [Message] { waiting.filter(inTopic) }
   var shownRecent: [Message] { recent.filter(inTopic) }
+  var shownArchive: [Message] { messages.filter { $0.archived && inTopic($0) } }
+
+  // "Archived" or "Deleted", with Undo, for a few seconds.
+  struct Notice: Equatable {
+    let text: String
+    let id: String
+  }
+  @Published private(set) var notice: Notice?
+  private var trash: [(message: Message, index: Int)] = []
+  private var noticeTimer: Timer?
 
   // Topics in the inbox, most used first, like the phone.
   var topics: [(name: String, count: Int)] {
@@ -134,14 +144,48 @@ final class AppModel: ObservableObject {
     snoozedUntil = date
   }
 
+  // Out of the inbox, into the archive. An open question stays open (the
+  // phone can still answer it), but its notification goes.
+  func archive(_ id: String, _ archived: Bool = true) {
+    guard let i = messages.firstIndex(where: { $0.id == id }) else { return }
+    messages[i].archived = archived
+    if archived { notifier.clear(id) }
+    Inbox.save(messages)
+    show(Notice(text: archived ? "Archived" : "Moved to the inbox", id: id))
+  }
+
   func delete(_ id: String) {
-    messages.removeAll { $0.id == id }
+    guard let i = messages.firstIndex(where: { $0.id == id }) else { return }
+    trash.append((messages[i], i))
+    messages.remove(at: i)
     notifier.clear(id)
     Inbox.save(messages)
+    show(Notice(text: "Deleted", id: id))
+  }
+
+  func undo() {
+    guard let notice else { return }
+    if let t = trash.lastIndex(where: { $0.message.id == notice.id }) {
+      let (message, index) = trash.remove(at: t)
+      messages.insert(message, at: min(index, messages.count))
+    } else if let i = messages.firstIndex(where: { $0.id == notice.id }) {
+      messages[i].archived.toggle()
+    }
+    Inbox.save(messages)
+    self.notice = nil
+  }
+
+  private func show(_ notice: Notice) {
+    self.notice = notice
+    noticeTimer?.invalidate()
+    noticeTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+      self?.notice = nil
+      self?.trash.removeAll()
+    }
   }
 
   func clearRecent() {
-    messages.removeAll { !$0.waiting }
+    messages.removeAll { !$0.waiting && !$0.archived }
     Inbox.save(messages)
   }
 

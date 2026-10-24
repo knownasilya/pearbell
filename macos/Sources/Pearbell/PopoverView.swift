@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverView: View {
   @EnvironmentObject var model: AppModel
   @State private var showSettings = false
+  @State private var showArchive = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -12,6 +13,8 @@ struct PopoverView: View {
         SettingsView(close: { showSettings = false })
       } else if let id = model.focused, let message = model.messages.first(where: { $0.id == id }) {
         MessageDetail(message: message)
+      } else if showArchive {
+        ArchiveView(close: { showArchive = false })
       } else {
         header
         ScrollView {
@@ -55,6 +58,8 @@ struct PopoverView: View {
       }
     }
     .frame(width: 380, height: 580)
+    .overlay(alignment: .bottom) { NoticeBar() }
+    .animation(.easeOut(duration: 0.2), value: model.notice)
     .background(Palette.background)
     .foregroundStyle(Palette.onSurface)
   }
@@ -67,6 +72,7 @@ struct PopoverView: View {
           .tracking(-0.5)
         Spacer()
         SnoozeMenu()
+        IconButton(symbol: "archivebox", label: "Archive") { showArchive = true }
         IconButton(symbol: "gearshape", label: "Settings") { showSettings = true }
       }
       StatusPill()
@@ -263,6 +269,21 @@ struct QuestionReplies: View {
 struct MessageRow: View {
   @EnvironmentObject var model: AppModel
   let message: Message
+  @State private var offset: CGFloat = 0
+
+  // Drag left to archive (or back to the inbox), right to delete, like the phone.
+  private var swipe: some Gesture {
+    DragGesture(minimumDistance: 12)
+      .onChanged { value in
+        if abs(value.translation.width) > abs(value.translation.height) { offset = value.translation.width }
+      }
+      .onEnded { _ in
+        let done = offset
+        withAnimation(.easeOut(duration: 0.15)) { offset = 0 }
+        if done < -90 { model.archive(message.id, !message.archived) }
+        if done > 90 { model.delete(message.id) }
+      }
+  }
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -307,11 +328,16 @@ struct MessageRow: View {
     .background(Palette.surfaceLow)
     .contentShape(Rectangle())
     .onTapGesture { model.focused = message.id }
+    .offset(x: offset)
+    .background(SwipeBackground(offset: offset, archived: message.archived))
+    .clipped()
+    .gesture(swipe)
     .contextMenu {
       Button("Copy text") {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(message.body, forType: .string)
       }
+      Button(message.archived ? "Move to the inbox" : "Archive") { model.archive(message.id, !message.archived) }
       Button("Delete", role: .destructive) { model.delete(message.id) }
     }
   }
@@ -414,6 +440,11 @@ struct MessageDetail: View {
         IconButton(symbol: "chevron.left", label: "Back to the inbox") { model.focused = nil }
           .keyboardShortcut(.cancelAction)
         Spacer()
+        IconButton(symbol: message.archived ? "tray.and.arrow.up" : "archivebox", label: message.archived ? "Move to the inbox" : "Archive") {
+          model.archive(message.id, !message.archived)
+          model.focused = nil
+        }
+        IconButton(symbol: "trash", label: "Delete") { model.delete(message.id) }
         IconButton(symbol: "doc.on.doc", label: "Copy text") {
           NSPasteboard.general.clearContents()
           NSPasteboard.general.setString(message.body, forType: .string)
@@ -571,6 +602,102 @@ extension View {
       keyboardShortcut(key, modifiers: modifiers)
     } else {
       self
+    }
+  }
+}
+
+// What a row shows behind it while you drag it.
+struct SwipeBackground: View {
+  let offset: CGFloat
+  let archived: Bool
+
+  var body: some View {
+    ZStack {
+      if offset > 0 {
+        HStack {
+          Image(systemName: "trash").padding(.leading, 20)
+          Spacer()
+        }
+        .background(Color.red.opacity(min(1, offset / 90)))
+      } else if offset < 0 {
+        HStack {
+          Spacer()
+          Image(systemName: archived ? "tray.and.arrow.up" : "archivebox").padding(.trailing, 20)
+        }
+        .background(Palette.primary.opacity(min(1, -offset / 90)))
+      }
+    }
+    .foregroundStyle(.white)
+    .font(.system(size: 15, weight: .semibold))
+  }
+}
+
+// Archived messages, with the same rows and topic chips as the inbox.
+struct ArchiveView: View {
+  @EnvironmentObject var model: AppModel
+  let close: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack(spacing: 10) {
+          IconButton(symbol: "chevron.left", label: "Back", action: close)
+            .keyboardShortcut(.cancelAction)
+          Text("Archive")
+            .font(.system(size: 22, weight: .semibold))
+          Spacer()
+        }
+        TopicChips()
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 16)
+      .padding(.bottom, 8)
+
+      ScrollView {
+        if model.shownArchive.isEmpty {
+          Text("Nothing archived. Drag a message to the left, or right-click it, to archive it.")
+            .font(.system(size: 13))
+            .foregroundStyle(Palette.onSurfaceVariant)
+            .multilineTextAlignment(.center)
+            .padding(.top, 60)
+            .padding(.horizontal, 32)
+        } else {
+          VStack(spacing: 2) {
+            ForEach(model.shownArchive) { message in
+              MessageRow(message: message)
+            }
+          }
+          .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+          .padding(.horizontal, 16)
+          .padding(.bottom, 16)
+        }
+      }
+    }
+  }
+}
+
+// "Archived · Undo" at the bottom of the popover.
+struct NoticeBar: View {
+  @EnvironmentObject var model: AppModel
+
+  var body: some View {
+    if let notice = model.notice {
+      HStack {
+        Text(notice.text)
+          .font(.system(size: 13, weight: .medium))
+        Spacer()
+        Button("Undo") { model.undo() }
+          .buttonStyle(.plain)
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundStyle(Palette.primaryContainer)
+          .keyboardShortcut("z", modifiers: .command)
+      }
+      .foregroundStyle(Palette.background)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 12)
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.onSurface))
+      .padding(12)
+      .transition(.move(edge: .bottom).combined(with: .opacity))
     }
   }
 }
