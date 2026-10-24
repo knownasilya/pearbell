@@ -3,7 +3,6 @@ package dev.pearbell.ui
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -71,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pearbell.Battery
 import dev.pearbell.Hub
 import dev.pearbell.Message
 import dev.pearbell.Peer
@@ -368,12 +368,11 @@ fun BellHero() {
 @Composable
 private fun BatteryBanner() {
   val context = LocalContext.current
-  val power = remember { context.getSystemService(PowerManager::class.java) }
-  var exempt by remember { mutableStateOf(power.isIgnoringBatteryOptimizations(context.packageName)) }
-  var dismissed by rememberSaveable { mutableStateOf(false) }
+  var exempt by remember { mutableStateOf(Battery.exempt(context)) }
+  var dismissed by remember { mutableStateOf(Battery.bannerHidden(context)) }
 
   LifecycleResumeEffect(Unit) {
-    exempt = power.isIgnoringBatteryOptimizations(context.packageName)
+    exempt = Battery.exempt(context)
     onPauseOrDispose {}
   }
   if (dismissed || exempt) return
@@ -399,7 +398,10 @@ private fun BatteryBanner() {
           Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
         )
       }) { Text("Allow", color = MaterialTheme.colorScheme.tertiary) }
-      IconButton(onClick = { dismissed = true }) {
+      IconButton(onClick = {
+        dismissed = true
+        Battery.setBannerHidden(context, true)
+      }) {
         Icon(painterResource(R.drawable.ic_close), contentDescription = "Dismiss", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
       }
     }

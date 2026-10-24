@@ -48,6 +48,8 @@ object Hub {
   val lastError = MutableStateFlow<String?>(null)
   // A message to show in full, set when a notification is tapped.
   val openMessage = MutableStateFlow<String?>(null)
+  // The app is on screen, so new messages show there instead of as notifications.
+  @Volatile var visible = false
 
   private val main = Handler(Looper.getMainLooper())
   private val queue = ArrayDeque<JSONObject>()
