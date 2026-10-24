@@ -14,7 +14,7 @@ struct PopoverView: View {
         header
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
-            if model.link == .offline {
+            if model.link == .offline || model.link == .outdated {
               DaemonCard()
                 .padding(.top, 8)
             }
@@ -111,6 +111,7 @@ struct StatusPill: View {
   }
 
   private var text: String {
+    if model.link == .outdated { return "The pearbell daemon needs an update" }
     if model.link != .connected { return "The pearbell daemon is not running" }
     if model.devices.isEmpty { return "No phone paired. Run: pearbell pair" }
     let online = model.onlinePhones.map(\.name)
@@ -314,14 +315,22 @@ struct DaemonCard: View {
       Image(systemName: "bolt.fill")
         .foregroundStyle(Palette.tertiary)
       VStack(alignment: .leading, spacing: 4) {
-        Text("Start the daemon")
-          .font(.system(size: 13, weight: .semibold))
-        Text(model.startError ?? "Messages reach this Mac through the pearbell daemon. To keep it running from login on, run: pearbell service install")
-          .font(.system(size: 12))
-          .fixedSize(horizontal: false, vertical: true)
-        Button("Start it now") { model.startDaemon() }
-          .buttonStyle(PillButtonStyle(filled: false))
-          .padding(.top, 6)
+        if model.link == .outdated {
+          Text("Update the pearbell CLI")
+            .font(.system(size: 13, weight: .semibold))
+          Text("The daemon running now is from a pearbell version without the menu bar app. Update it with npm install -g pearbell@latest, then run pearbell stop to restart it.")
+            .font(.system(size: 12))
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+          Text("Start the daemon")
+            .font(.system(size: 13, weight: .semibold))
+          Text(model.startError ?? "Messages reach this Mac through the pearbell daemon. To keep it running from login on, run: pearbell service install")
+            .font(.system(size: 12))
+            .fixedSize(horizontal: false, vertical: true)
+          Button("Start it now") { model.startDaemon() }
+            .buttonStyle(PillButtonStyle(filled: false))
+            .padding(.top, 6)
+        }
       }
     }
     .foregroundStyle(Palette.onTertiaryContainer)

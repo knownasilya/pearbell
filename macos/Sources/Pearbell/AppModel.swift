@@ -7,6 +7,7 @@ import ServiceManagement
 final class AppModel: ObservableObject {
   enum Link: Equatable {
     case connecting, connected, offline
+    case outdated // the daemon does not know the menu bar app
   }
 
   enum Mode: String, CaseIterable, Identifiable {
@@ -55,7 +56,14 @@ final class AppModel: ObservableObject {
       ["type": "mac", "presence": self?.presenceFrame() ?? [:]]
     }
     daemon.onState = { [weak self] up in
-      self?.link = up ? .connected : .offline
+      guard let self else { return }
+      // Stay on "outdated" until a daemon accepts us; setting the same value
+      // would still redraw the popover.
+      let next: Link = up ? .connected : (self.link == .outdated ? .outdated : .offline)
+      if self.link != next { self.link = next }
+    }
+    daemon.onError = { [weak self] _ in
+      if self?.link != .outdated { self?.link = .outdated }
     }
     daemon.onFrame = { [weak self] frame in
       self?.handle(frame)
@@ -146,8 +154,9 @@ final class AppModel: ObservableObject {
   private func handle(_ frame: Frame) {
     switch frame.type {
     case "state":
-      if let name = frame.computer { computer = name }
-      devices = frame.devices ?? []
+      if let name = frame.computer, name != computer { computer = name }
+      let next = frame.devices ?? []
+      if next != devices { devices = next }
       updateAway()
 
     case "msg":

@@ -24,6 +24,7 @@ struct Frame: Decodable {
   let computer: String?
   let devices: [Device]?
   let open: [String]?
+  let error: String?
 }
 
 struct Device: Decodable, Identifiable, Equatable {

@@ -3,11 +3,13 @@ import Combine
 import SwiftUI
 
 // The menu bar item and its popover.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
   let model = AppModel()
   private var item: NSStatusItem!
   private let popover = NSPopover()
   private var changes: AnyCancellable?
+  private var closedAt = Date.distantPast
+  private var icon = ""
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -15,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     item.button?.action = #selector(toggle)
 
     popover.behavior = .transient
+    popover.delegate = self
     popover.animates = true
     popover.contentSize = NSSize(width: 380, height: 580)
     popover.contentViewController = NSHostingController(rootView: PopoverView().environmentObject(model))
@@ -31,9 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func toggle() {
     if popover.isShown {
       popover.performClose(nil)
-    } else {
+    } else if Date().timeIntervalSince(closedAt) > 0.3 {
+      // A click on the icon while it was open already closed it.
       show()
     }
+  }
+
+  func popoverDidClose(_ notification: Notification) {
+    closedAt = Date()
   }
 
   private func show() {
@@ -52,9 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } else {
       symbol = "bell"
     }
-    let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "pearbell")
-    image?.isTemplate = true
-    item.button?.image = image
+    if symbol != icon {
+      icon = symbol
+      let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "pearbell")
+      image?.isTemplate = true
+      item.button?.image = image
+    }
     item.button?.toolTip = model.waiting.isEmpty ? "pearbell" : "pearbell: \(model.waiting.count) waiting for you"
   }
 }

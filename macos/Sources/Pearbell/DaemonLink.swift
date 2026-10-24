@@ -8,9 +8,13 @@ import Network
 final class DaemonLink {
   var hello: () -> [String: Any] = { [:] }
   var onFrame: (Frame) -> Void = { _ in }
+  // true once the daemon answers the hello, false when the link drops.
   var onState: (Bool) -> Void = { _ in }
+  // The daemon refused the hello, e.g. a version without the menu bar app.
+  var onError: (String) -> Void = { _ in }
 
   private var conn: NWConnection?
+  private var up = false
   private var buffer = Data()
   private var delay: TimeInterval = 1
   private var redial: DispatchWorkItem?
@@ -43,8 +47,6 @@ final class DaemonLink {
       guard let self, let c, c === self.conn else { return }
       switch state {
       case .ready:
-        self.delay = 1
-        self.onState(true)
         self.send(self.hello())
         self.receive(c)
       case .failed, .waiting:
@@ -64,7 +66,15 @@ final class DaemonLink {
         while let newline = self.buffer.firstIndex(of: 0x0A) {
           let line = self.buffer.subdata(in: self.buffer.startIndex..<newline)
           self.buffer.removeSubrange(self.buffer.startIndex...newline)
-          if let frame = try? JSONDecoder().decode(Frame.self, from: line) {
+          guard let frame = try? JSONDecoder().decode(Frame.self, from: line) else { continue }
+          if frame.type == "error" {
+            self.onError(frame.error ?? "The daemon refused the connection")
+          } else {
+            if !self.up {
+              self.up = true
+              self.delay = 1
+              self.onState(true)
+            }
             self.onFrame(frame)
           }
         }
@@ -81,12 +91,13 @@ final class DaemonLink {
     guard c === conn else { return }
     conn = nil
     c.cancel()
+    up = false
     onState(false)
 
     let work = DispatchWorkItem { [weak self] in self?.dial() }
     redial = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-    delay = min(delay * 2, 10)
+    delay = min(delay * 2, 30)
   }
 
   // Same rules as socketPath() in cli/control.js.
