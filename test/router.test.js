@@ -1,5 +1,5 @@
 import test from 'brittle'
-import { decide, awayReason, idleSeconds, snoozeReason } from '../cli/router.js'
+import { decide, awayReason, idleSeconds, presenceText, snoozeReason } from '../cli/router.js'
 
 const now = 1_000_000
 const here = { idle: 3, at: now }
@@ -58,4 +58,12 @@ test('router: snoozed means the phone until it runs out', (t) => {
   t.ok(r.reason.startsWith('snoozed until '))
   t.is(decide({ presence: p, phones: [phone], now: now + 3600_001 }).to, 'mac', 'over')
   t.absent(snoozeReason({ ...here, snoozedUntil: now - 1 }, now))
+})
+
+test('router: the Mac in a word or two', (t) => {
+  t.is(presenceText({ idle: 3, at: now }, now), 'active')
+  t.is(presenceText({ idle: 360, at: now }, now), 'idle 6 min')
+  t.is(presenceText({ idle: 0, locked: true, at: now }, now), 'locked')
+  t.is(presenceText({ idle: 0, asleep: true, at: now }, now), 'asleep')
+  t.ok(presenceText({ idle: 0, at: now, snoozedUntil: now + 60_000 }, now).startsWith('snoozed until'))
 })

@@ -7,6 +7,7 @@ import qrcode from 'qrcode-terminal'
 import * as config from './config.js'
 import * as control from './control.js'
 import { Daemon } from './daemon.js'
+import { presenceText } from './router.js'
 import { serveHttp } from './http.js'
 import * as service from './service.js'
 
@@ -16,7 +17,7 @@ Usage:
   pearbell pair                      Show a code for the phone app to scan
   pearbell send <text...>            Send a notification
   pearbell ask <text...>             Send and wait for a reply (prints it)
-  pearbell devices                   List paired phones and who is online
+  pearbell devices                   List paired phones, who is online and the Mac
   pearbell unpair <name|key>         Forget a phone
   pearbell daemon                    Run the background daemon in the
                                      foreground (other commands start it)
@@ -182,22 +183,29 @@ async function runSend (wantsReply) {
 
 async function runDevices () {
   let devices = config.load().devices.map((d) => ({ ...d, connected: null }))
+  let mac = null
 
   try {
     const sock = await control.connect({ start: false })
-    await control.request(sock, { type: 'status' }, (frame) => { devices = frame.devices })
+    await control.request(sock, { type: 'status' }, (frame) => {
+      devices = frame.devices
+      mac = frame.mac
+    })
   } catch {}
 
+  // --json stays the list of phones; the menu bar app is only in the text.
   if (opts.json) {
     console.log(JSON.stringify(devices))
-  } else if (!devices.length) {
-    console.log('No phone paired yet. Run: pearbell pair')
-  } else {
-    for (const d of devices) {
-      const state = d.connected === null ? 'daemon not running' : d.connected ? 'online' : 'offline'
-      console.log(`${d.name}  ${d.publicKey.slice(0, 12)}  ${state}  paired ${new Date(d.pairedAt).toLocaleString()}`)
-    }
+    return 0
   }
+  if (!devices.length) {
+    console.log('No phone paired yet. Run: pearbell pair')
+  }
+  for (const d of devices) {
+    const state = d.connected === null ? 'daemon not running' : d.connected ? 'online' : 'offline'
+    console.log(`${d.name}  ${d.publicKey.slice(0, 12)}  ${state}  paired ${new Date(d.pairedAt).toLocaleString()}`)
+  }
+  if (mac) console.log(`this Mac (menu bar app)  ${presenceText(mac.presence)}`)
   return 0
 }
 

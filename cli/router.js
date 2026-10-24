@@ -78,6 +78,16 @@ export function awayReason (presence, now = Date.now()) {
   return null
 }
 
+// The menu bar app's state in a word or two, for pearbell devices.
+export function presenceText (presence, now = Date.now()) {
+  if (presence.asleep) return 'asleep'
+  if (presence.locked) return 'locked'
+  const snooze = snoozeReason(presence, now)
+  if (snooze) return snooze
+  const idle = idleSeconds(presence, now)
+  return idle >= 60 ? `idle ${duration(idle)}` : 'active'
+}
+
 // The app reports idle time every few seconds; count on from the last report.
 export function idleSeconds (presence, now = Date.now()) {
   const idle = Number.isFinite(presence.idle) && presence.idle >= 0 ? presence.idle : 0
