@@ -2,17 +2,21 @@
   "solution": {
     "pearbell": {
       "impact": "minor",
-      "oldVersion": "0.7.1",
-      "newVersion": "0.8.0",
+      "oldVersion": "0.8.0",
+      "newVersion": "0.9.0",
       "tagName": "latest",
       "constraints": [
         {
           "impact": "minor",
           "reason": "Appears in changelog section :rocket: Enhancement"
+        },
+        {
+          "impact": "patch",
+          "reason": "Appears in changelog section :bug: Bug Fix"
         }
       ],
       "pkgJSONPath": "./package.json"
     }
   },
-  "description": "## Release (2026-10-24)\n\n* pearbell 0.8.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#2](https://github.com/knownasilya/pearbell/pull/2) Add a macOS menu bar app with Mac-or-phone routing ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
+  "description": "## Release (2026-10-24)\n\n* pearbell 0.9.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#7](https://github.com/knownasilya/pearbell/pull/7) Add updatable messages with Markdown task lists ([@knownasilya](https://github.com/knownasilya))\n\n#### :bug: Bug Fix\n* `pearbell`\n  * [#6](https://github.com/knownasilya/pearbell/pull/6) Fill the whole row with the swipe colors ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
 }
