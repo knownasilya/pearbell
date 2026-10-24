@@ -22,6 +22,7 @@ The popover is the phone's inbox: open questions on top with their quick replies
 - **Open a message:** click its notification, or its row in the inbox, to see all of it, with its topic, time and where it went. Esc goes back.
 - **Markdown:** messages show **bold**, *italic*, `code`, ~~strike~~, headings, lists, quotes and code blocks, like on the phone. Links and bare `https://` URLs open in your browser. Only http, https and mailto links open.
 - **Topics:** messages sent with `-T <topic>` get a tag, and chips under the header filter the inbox by topic. Notifications are grouped by topic too.
+- **Archive and delete:** drag a message left to archive it, right to delete it, or right-click it. Undo shows for a few seconds. The archive button in the header lists archived messages.
 - **Snooze:** the moon menu sends everything to the phone for an hour or until tomorrow morning. **Resume** ends it.
 - **Keys:** ⌘1, ⌘2 and ⌘3 pick the quick replies of the first open question.
 
