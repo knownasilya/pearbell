@@ -611,6 +611,9 @@ struct SwipeBackground: View {
   let offset: CGFloat
   let archived: Bool
 
+  // Full colour once the drag would act.
+  private var strength: Double { Double(min(abs(offset) / CGFloat(90), CGFloat(1))) }
+
   var body: some View {
     ZStack {
       if offset > 0 {
@@ -618,13 +621,13 @@ struct SwipeBackground: View {
           Image(systemName: "trash").padding(.leading, 20)
           Spacer()
         }
-        .background(Color.red.opacity(min(1, offset / 90)))
+        .background(Color.red.opacity(strength))
       } else if offset < 0 {
         HStack {
           Spacer()
           Image(systemName: archived ? "tray.and.arrow.up" : "archivebox").padding(.trailing, 20)
         }
-        .background(Palette.primary.opacity(min(1, -offset / 90)))
+        .background(Palette.primary.opacity(strength))
       }
     }
     .foregroundStyle(.white)
