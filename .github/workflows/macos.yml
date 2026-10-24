@@ -43,3 +43,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP }}
+          # Whichever workflow finishes first creates the release, so both ask for notes.
+          generate_release_notes: true
