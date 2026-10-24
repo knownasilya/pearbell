@@ -8,6 +8,7 @@ import * as config from './config.js'
 import * as control from './control.js'
 import { Daemon } from './daemon.js'
 import { serveHttp } from './http.js'
+import * as service from './service.js'
 
 const HELP = `pearbell - peer-to-peer messages to your phone
 
@@ -22,6 +23,9 @@ Usage:
   pearbell stop                      Stop the background daemon
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
+  pearbell service [install|uninstall|status]
+                                     Keep the daemon running from login on
+                                     (macOS launch agent)
 
 Options for send and ask:
   -t, --title <title>                Notification title
@@ -81,6 +85,7 @@ async function run () {
     case 'daemon': return runDaemon()
     case 'stop': return runStop()
     case 'http': return runHttp()
+    case 'service': return runService()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
   }
 }
@@ -199,6 +204,12 @@ async function runUnpair () {
 }
 
 async function runStop () {
+  if (service.installed()) {
+    service.kickstart({ restart: true })
+    console.log('The launch agent keeps the daemon running, so it was restarted.')
+    console.log('To stop it for good: pearbell service uninstall')
+    return 0
+  }
   try {
     const sock = await control.connect({ start: false })
     await control.request(sock, { type: 'stop' }, () => {})
@@ -248,6 +259,11 @@ async function runHttp () {
 
 // Stop the daemon (if any) and start a fresh one that reads the new config.
 async function restartDaemon () {
+  if (service.installed()) {
+    service.kickstart({ restart: true })
+    await waitForDaemon()
+    return
+  }
   try {
     const sock = await control.connect({ start: false })
     let pid = null
@@ -260,6 +276,51 @@ async function restartDaemon () {
     }
   } catch {}
   ;(await control.connect()).end()
+}
+
+async function runService () {
+  const action = rest[0] || 'status'
+
+  if (action === 'install') {
+    // Hand the daemon over to launchd: stop the one the CLI started, if any.
+    try {
+      const sock = await control.connect({ start: false })
+      let pid = null
+      await control.request(sock, { type: 'status' }, (frame) => { pid = frame.pid })
+      const stop = await control.connect({ start: false })
+      await control.request(stop, { type: 'stop' }, () => {})
+      for (let i = 0; pid && i < 100; i++) {
+        try { process.kill(pid, 0) } catch { break }
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    } catch {}
+    service.install(control.BIN)
+    await waitForDaemon()
+    console.log(`Installed ${service.plistPath()}`)
+    console.log('The daemon now starts at login and restarts if it stops.')
+  } else if (action === 'uninstall') {
+    service.uninstall()
+    console.log('Removed the launch agent and stopped the daemon. Any pearbell command starts it again.')
+    return 0
+  } else if (action !== 'status') {
+    throw new Error('Use: pearbell service [install|uninstall|status]')
+  }
+
+  const s = service.status()
+  if (!s.installed) console.log(service.supported() ? 'Launch agent not installed. Install it with: pearbell service install' : 'pearbell service only supports macOS for now')
+  else console.log(`Launch agent installed, daemon ${s.running ? `running (pid ${s.pid})` : 'not running'}`)
+  return 0
+}
+
+async function waitForDaemon () {
+  for (let i = 0; i < 100; i++) {
+    try {
+      (await control.connect({ start: false })).end()
+      return
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`The daemon did not start, see ${control.logPath()}`)
 }
 
 async function runDaemon () {

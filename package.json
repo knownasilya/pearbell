@@ -1,6 +1,6 @@
 {
   "name": "pearbell",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Peer-to-peer push messages between a CLI and your Android phone, built on the Pear stack. An ntfy.sh alternative for AI tools.",
   "keywords": [
     "pear",

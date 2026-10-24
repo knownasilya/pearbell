@@ -10,8 +10,9 @@ import { fileURLToPath } from 'node:url'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import * as config from './config.js'
 import { SEND_TTL } from './daemon.js'
+import * as service from './service.js'
 
-const BIN = fileURLToPath(new URL('./bin.js', import.meta.url))
+export const BIN = fileURLToPath(new URL('./bin.js', import.meta.url))
 
 export function socketPath () {
   const hash = createHash('sha256').update(config.home()).digest('hex').slice(0, 12)
@@ -137,9 +138,14 @@ export async function connect ({ start = true } = {}) {
   }
 
   config.load() // create the identity before the daemon races for it
-  const log = fs.openSync(logPath(), 'a')
-  spawn(process.execPath, [BIN, 'daemon'], { detached: true, stdio: ['ignore', log, log], env: process.env }).unref()
-  fs.closeSync(log)
+  if (service.installed()) {
+    // launchd owns the daemon; ask it instead of starting a second one.
+    service.kickstart()
+  } else {
+    const log = fs.openSync(logPath(), 'a')
+    spawn(process.execPath, [BIN, 'daemon'], { detached: true, stdio: ['ignore', log, log], env: process.env }).unref()
+    fs.closeSync(log)
+  }
 
   const until = Date.now() + 10_000
   while (Date.now() < until) {

@@ -100,6 +100,16 @@ npm link        # puts this checkout's `pearbell` on your PATH
 
 Identity and paired phones live in `~/.config/pearbell/` (set `PEARBELL_HOME` to change it). The daemon logs to `daemon.log` in the same folder.
 
+**Keep the daemon running (macOS).** Any `pearbell` command starts the daemon, but after a reboot nothing runs until you use one. If other tools send through it (see [HTTP API](#http-api)), install the launch agent so it starts at login and comes back if it stops:
+
+```bash
+pearbell service install     # ~/Library/LaunchAgents/dev.pearbell.daemon.plist
+pearbell service status
+pearbell service uninstall
+```
+
+While it is installed, `pearbell stop` and `pearbell http on` restart the daemon through launchd.
+
 ## Install the Android app
 
 It needs Android 10 or later. Get the APK one of these ways:
@@ -254,6 +264,6 @@ npm run fake-phone           # listen; type a reply and press Enter
 ## Limits
 
 - **Android only** for now. The phone core is plain Bare JavaScript, so an iOS app could reuse it. But iOS does not let apps keep a connection open in the background, so it would need a push service.
-- **The computer must be on** with the daemon running. After a reboot, the daemon starts with your next `pearbell` command, and the phone finds it within 30 seconds.
+- **The computer must be on** with the daemon running. After a reboot, the daemon starts with your next `pearbell` command (or at login with `pearbell service install`), and the phone finds it within 30 seconds.
 - **Two strict NATs** (for example, both sides on carrier networks) can still fail to connect. A computer on a home or office network is fine.
 - **Battery.** The app holds one idle encrypted connection per computer. That costs little, but it is not free.
