@@ -9,7 +9,7 @@ import b4a from 'b4a'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { encodePairCode, toHex } from '../shared/protocol.js'
-import { awayReason, decide, idleSeconds } from './router.js'
+import { awayReason, decide, idleSeconds, snoozeReason } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
 export const SEND_TTL = 24 * 60 * 60 * 1000
@@ -219,20 +219,21 @@ export class Daemon extends EventEmitter {
       mode: ['auto', 'mac', 'phone'].includes(p.mode) ? p.mode : 'auto',
       idleAfter: num(p.idleAfter),
       escalateAfter: num(p.escalateAfter),
+      snoozedUntil: num(p.snoozedUntil),
       at: Date.now()
     }
 
     // Stepped away with a question open on the Mac, or before you touched the
     // Mac after a message showed there: hand it to the phones.
     const presence = this.mac.presence
-    const away = presence.mode === 'mac'
+    const away = snoozeReason(presence) || (presence.mode === 'mac'
       ? null
-      : presence.mode === 'phone' ? 'set to Always phone' : awayReason(presence)
+      : presence.mode === 'phone' ? 'set to Always phone' : awayReason(presence))
     const now = Date.now()
     for (const entry of [...this.messages.values()]) {
       if (entry.shownAt) {
         const seen = idleSeconds(presence, now) < (now - entry.shownAt) / 1000
-        if (seen || presence.mode === 'mac') this.close(entry.id)
+        if (seen || !away && presence.mode === 'mac') this.close(entry.id)
         else if (away) this._follow(entry, away)
       } else if (away && entry.wantsReply && entry.targets.has(MAC)) {
         this.escalate(entry.id, away)

@@ -43,6 +43,8 @@ final class AppModel: ObservableObject {
   @Published var mode: Mode { didSet { saveSettings() } }
   @Published var idleAfter: Double { didSet { saveSettings() } }
   @Published var escalateAfter: Double { didSet { saveSettings() } }
+  // "Send to phone for 1 hour": everything goes to the phone until then.
+  @Published private(set) var snoozedUntil: Date? { didSet { saveSettings() } }
 
   var onOpen: () -> Void = {}
 
@@ -73,6 +75,7 @@ final class AppModel: ObservableObject {
     mode = Mode(rawValue: defaults.string(forKey: "mode") ?? "") ?? .auto
     idleAfter = defaults.object(forKey: "idleAfter") as? Double ?? 300
     escalateAfter = defaults.object(forKey: "escalateAfter") as? Double ?? 180
+    snoozedUntil = (defaults.object(forKey: "snoozedUntil") as? Date).flatMap { $0 > Date() ? $0 : nil }
     messages = Inbox.load()
 
     daemon.hello = { [weak self] in
@@ -124,6 +127,10 @@ final class AppModel: ObservableObject {
     messages[i].answeredBy = nil
     notifier.clear(id)
     Inbox.save(messages)
+  }
+
+  func snooze(until date: Date?) {
+    snoozedUntil = date
   }
 
   func delete(_ id: String) {
@@ -253,11 +260,16 @@ final class AppModel: ObservableObject {
       "asleep": presence.asleep,
       "mode": mode.rawValue,
       "idleAfter": idleAfter,
-      "escalateAfter": escalateAfter
+      "escalateAfter": escalateAfter,
+      "snoozedUntil": (snoozedUntil?.timeIntervalSince1970 ?? 0) * 1000
     ]
   }
 
   private func pushPresence() {
+    if let until = snoozedUntil, until <= Date() {
+      snoozedUntil = nil // saveSettings pushes presence again
+      return
+    }
     var frame = presenceFrame()
     frame["type"] = "presence"
     daemon.send(frame)
@@ -267,7 +279,10 @@ final class AppModel: ObservableObject {
   // The same rules as cli/router.js, to say in the popover where messages go.
   private func updateAway() {
     let reason: String?
-    if devices.isEmpty || mode == .mac {
+    if let until = snoozedUntil, !devices.isEmpty {
+      let time = until.formatted(date: .omitted, time: .shortened)
+      reason = Calendar.current.isDateInToday(until) ? "snoozed until \(time)" : "snoozed until tomorrow \(time)"
+    } else if devices.isEmpty || mode == .mac {
       reason = nil
     } else if mode == .phone {
       reason = "set to Always phone"
@@ -288,6 +303,7 @@ final class AppModel: ObservableObject {
     defaults.set(mode.rawValue, forKey: "mode")
     defaults.set(idleAfter, forKey: "idleAfter")
     defaults.set(escalateAfter, forKey: "escalateAfter")
+    defaults.set(snoozedUntil, forKey: "snoozedUntil")
     pushPresence()
   }
 }

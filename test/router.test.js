@@ -1,5 +1,5 @@
 import test from 'brittle'
-import { decide, awayReason, idleSeconds } from '../cli/router.js'
+import { decide, awayReason, idleSeconds, snoozeReason } from '../cli/router.js'
 
 const now = 1_000_000
 const here = { idle: 3, at: now }
@@ -49,4 +49,13 @@ test('router: modes and explicit routes', (t) => {
   t.is(decide({ route: 'mac', presence: { ...here, locked: true }, phones: [phone], now }).to, 'mac')
   t.is(decide({ route: 'mac', presence: null, phones: [phone], now }).to, 'phone', 'no app to show it')
   t.is(decide({ route: 'all', presence: here, phones: [phone], now }).to, 'both')
+})
+
+test('router: snoozed means the phone until it runs out', (t) => {
+  const p = { ...here, mode: 'mac', snoozedUntil: now + 3600_000 }
+  const r = decide({ presence: p, phones: [phone], now })
+  t.is(r.to, 'phone')
+  t.ok(r.reason.startsWith('snoozed until '))
+  t.is(decide({ presence: p, phones: [phone], now: now + 3600_001 }).to, 'mac', 'over')
+  t.absent(snoozeReason({ ...here, snoozedUntil: now - 1 }, now))
 })

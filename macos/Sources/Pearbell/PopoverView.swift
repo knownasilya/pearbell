@@ -66,6 +66,7 @@ struct PopoverView: View {
           .font(.system(size: 28, weight: .semibold))
           .tracking(-0.5)
         Spacer()
+        SnoozeMenu()
         IconButton(symbol: "gearshape", label: "Settings") { showSettings = true }
       }
       StatusPill()
@@ -469,6 +470,41 @@ struct MessageDetail: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
+  }
+}
+
+// Send everything to the phone for a while, like a Do Not Disturb for the Mac.
+struct SnoozeMenu: View {
+  @EnvironmentObject var model: AppModel
+
+  var body: some View {
+    Menu {
+      if let until = model.snoozedUntil {
+        Text("Snoozed until \(until.formatted(date: .omitted, time: .shortened))")
+        Button("Resume") { model.snooze(until: nil) }
+        Divider()
+      }
+      Button("Send to phone for 1 hour") { model.snooze(until: Date().addingTimeInterval(3600)) }
+      Button("Send to phone until tomorrow") { model.snooze(until: tomorrowMorning()) }
+    } label: {
+      Image(systemName: model.snoozedUntil == nil ? "moon" : "moon.fill")
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(model.snoozedUntil == nil ? Palette.onSurface : Palette.primary)
+        .frame(width: 32, height: 32)
+        .background(Circle().fill(Palette.surfaceContainer))
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help(model.snoozedUntil == nil ? "Snooze this Mac" : "Snoozed")
+    .disabled(model.devices.isEmpty)
+  }
+
+  // 8:00 the next morning.
+  private func tomorrowMorning() -> Date {
+    let calendar = Calendar.current
+    let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: tomorrow) ?? tomorrow
   }
 }
 

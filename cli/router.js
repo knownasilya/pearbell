@@ -9,7 +9,8 @@
 //   1. An explicit route (--to mac|phone|all, or -d <phone>) is followed.
 //   2. No menu bar app: the phone, as before.
 //   3. No phone paired: the Mac.
-//   4. The menu says "Always Mac" or "Always phone": that one.
+//   4. Snoozed from the menu ("Send to phone for 1 hour"): the phone. Then
+//      "Always Mac" or "Always phone": that one.
 //   5. Mac asleep or screen locked: the phone.
 //   6. No input for idleAfter seconds (default 5 min): the phone.
 //   7. Otherwise you are at the Mac, so the Mac. A question there also goes
@@ -38,6 +39,9 @@ export function decide ({ wantsReply = false, route = 'auto', presence = null, p
   if (!phones.length) return { to: 'mac', reason: 'no phone is paired', escalateAfter: null }
   if (route === 'mac') return { to: 'mac', reason: 'sent to the Mac', escalateAfter: null }
 
+  const snooze = snoozeReason(presence, now)
+  if (snooze) return pick('phone', snooze)
+
   const mode = presence.mode
   if (mode === 'mac') return { to: 'mac', reason: 'set to Always Mac', escalateAfter: null }
   if (mode === 'phone') return pick('phone', 'set to Always phone')
@@ -52,6 +56,15 @@ export function decide ({ wantsReply = false, route = 'auto', presence = null, p
     escalateAfter: wantsReply && after > 0 ? after * 1000 : null,
     follow: true
   }
+}
+
+// "snoozed until 14:30" while the Mac is snoozed, else null.
+export function snoozeReason (presence, now = Date.now()) {
+  const until = presence && presence.snoozedUntil
+  if (!Number.isFinite(until) || until <= now) return null
+  const sameDay = new Date(until).toDateString() === new Date(now).toDateString()
+  const time = new Date(until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return `snoozed until ${sameDay ? time : `tomorrow ${time}`}`
 }
 
 // Why the Mac does not count as in use right now, or null if it does.
