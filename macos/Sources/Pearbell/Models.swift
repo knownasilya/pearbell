@@ -14,6 +14,8 @@ struct Frame: Decodable {
   let topic: String?
   let actions: [String]?
   let wantsReply: Bool?
+  let key: String?
+  let update: Bool?
   let notify: Bool?
   let route: Route?
   let sentAt: Double?
@@ -48,6 +50,10 @@ struct Message: Codable, Identifiable, Equatable {
   var answeredBy: String?
   var closed: Bool
   var archived = false
+  // The sender's own id (pearbell send --id), and when an update last changed it.
+  var key: String? = nil
+  var updatedAt: Date? = nil
+  var updates = 0
 
   var sender: String { title.isEmpty ? "pearbell" : title }
   // An open question in the inbox. An archived one stays open but out of the way.
@@ -55,7 +61,7 @@ struct Message: Codable, Identifiable, Equatable {
 }
 
 extension Message {
-  // Inboxes saved before archiving have no "archived".
+  // Inboxes saved before archiving have no "archived", and before updates no "key".
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(String.self, forKey: .id)
@@ -71,6 +77,9 @@ extension Message {
     answeredBy = try c.decodeIfPresent(String.self, forKey: .answeredBy)
     closed = try c.decode(Bool.self, forKey: .closed)
     archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+    key = try c.decodeIfPresent(String.self, forKey: .key)
+    updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
+    updates = try c.decodeIfPresent(Int.self, forKey: .updates) ?? 0
   }
 }
 

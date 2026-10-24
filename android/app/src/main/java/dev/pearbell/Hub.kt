@@ -23,6 +23,10 @@ data class Message(
   val answeredAt: Long?,
   val closed: Boolean,
   val archived: Boolean,
+  // The sender's own id (pearbell send --id), and when an update last changed it.
+  val key: String? = null,
+  val updatedAt: Long? = null,
+  val updates: Int = 0,
 ) {
   val open get() = wantsReply && answer == null && !closed
 }
@@ -129,6 +133,9 @@ object Hub {
       answeredAt = if (o.isNull("answeredAt") || !o.has("answeredAt")) null else o.optLong("answeredAt"),
       closed = o.optBoolean("closed"),
       archived = o.optBoolean("archived"),
+      key = if (o.isNull("key") || !o.has("key")) null else o.optString("key"),
+      updatedAt = if (o.isNull("updatedAt") || !o.has("updatedAt")) null else o.optLong("updatedAt"),
+      updates = o.optInt("updates"),
     )
   }
 }

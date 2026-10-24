@@ -184,6 +184,7 @@ pearbell stop       # stop the background daemon
 | `-t, --title` | Notification title |
 | `-T, --topic` | Group the message under a topic in the app (up to 40 characters) |
 | `-a, --actions a,b,c` | Up to 3 quick-reply buttons (the notification shows 2 plus Reply) |
+| `-i, --id` | Your own id for the message (up to 64 characters, no spaces), so [`pearbell update`](#update-a-message) can change it |
 | `-d, --device` | Only this phone (name or start of its key) |
 | `--to` | `auto` (default), `mac`, `phone` or `all`. With the [menu bar app](#the-mac-menu-bar-app) running, `auto` uses the Mac while you are at it. |
 | `-w, --wait` | Wait for a reply (`send -w` is `ask`) |
@@ -199,17 +200,35 @@ Give messages a topic (`-T builds`, or `"topic": "builds"` in the HTTP API) to g
 
 ### Long messages
 
-A message can hold up to 16,000 characters. A longer one is cut with a "… (cut: N more characters)" note at the end, the CLI warns about it, and the HTTP API adds `"truncated": true` to its reply. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
+A message can hold up to 16,000 characters. A longer one is cut with a "… (cut: N more characters)" note at the end, the CLI warns about it, and the HTTP API adds `"truncated": true` to its reply. The inbox shows the first three lines; tap the message, or its notification, to read all of it.
 
 ### Markdown
 
-Message text is Markdown. The app shows **bold**, *italic*, `code`, ~~strike~~, headings, lists, quotes and fenced code blocks. Links (`[text](https://…)`, `<https://…>` or a bare `https://…`) open in the browser when you tap them on a question card or in a message's details. Only `http`, `https` and `mailto` links open. Notifications show the text without the markup.
+Message text is Markdown. The app shows **bold**, *italic*, `code`, ~~strike~~, headings, lists, task lists (`- [ ]` and `- [x]`), quotes and fenced code blocks. Links (`[text](https://…)`, `<https://…>` or a bare `https://…`) open in the browser when you tap them on a question card or in a message's details. Only `http`, `https` and `mailto` links open. Notifications show the text without the markup.
 
 ```bash
 pearbell ask -a "Ship it,Hold" "## Deploy ready
 PR **#42** is green: [view it](https://github.com/you/app/pull/42)
 - \`npm test\`: 211 passed"
 ```
+
+### Update a message
+
+Give a message an id with `--id`, and `pearbell update <id>` changes it in place on the phone and the Mac: new text, and a new title or topic if you pass `-t` or `-T`. An update makes no new notification sound; a notification that is still showing gets the new text. Updated messages say **updated** with the time of the last change. If the phone no longer has the message (you deleted it, say), the update shows as a new one.
+
+Task lists make this handy for progress: `- [ ] task` shows as an open box and `- [x] task` as a ticked one.
+
+```bash
+pearbell send -t "Release" --id release-0.9 "- [ ] Tests
+- [ ] Build the APK
+- [ ] Publish"
+
+pearbell update release-0.9 "- [x] Tests
+- [x] Build the APK
+- [ ] Publish"
+```
+
+An id points to the newest message from this computer that has it. `ask --id` works too; an update changes the question's text and leaves it open.
 
 ## HTTP API
 
@@ -232,11 +251,19 @@ curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
 curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
   -d '{"body":"Deploy?","actions":["Yes","No"],"wait":true,"timeout":300}'
 # {"id":"…","reply":"Yes","device":"Pixel 8"}   (504 {"error":"timeout"} if no answer)
+
+curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
+  -d '{"id":"deploy","body":"- [ ] build\n- [ ] ship"}'
+curl -s http://127.0.0.1:7457/update -H "authorization: Bearer $TOKEN" \
+  -d '{"id":"deploy","body":"- [x] build\n- [ ] ship"}'
 ```
+
+The `id` you give is your own; the `id` in the answer is the daemon's, and the answer repeats yours as `key`.
 
 | Endpoint | Body | Answer |
 | --- | --- | --- |
-| `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `device`, `to`, `wait`, `timeout` (seconds) | `{ id, route, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
+| `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `id`, `device`, `to`, `wait`, `timeout` (seconds) | `{ id, route, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
+| `POST /update` | `id` and `body` (required), `title`, `topic`, `device`, `to`, `timeout` | as `/send` without `wait` |
 | `GET /devices` | | `[{ name, publicKey, connected }]` |
 
 Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).

@@ -3,6 +3,7 @@ package dev.pearbell.ui
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -76,5 +77,22 @@ class MarkdownTest {
 
   @Test fun unclosedMarkupIsLiteral() {
     assertEquals("**open and `tick", Markdown.plain("**open and `tick"))
+  }
+
+  @Test fun taskList() {
+    val md = "- [ ] build\n- [x] test\n* [X] lint\n1. [ ] ship"
+    val c = Markdown.CHECKED
+    val u = Markdown.UNCHECKED
+    assertEquals("$u  build\n$c  test\n$c  lint\n$u  ship", Markdown.plain(md))
+  }
+
+  @Test fun doneTaskIsStruckThrough() {
+    val out = Markdown.render("- [x] test", links = false)
+    val start = out.text.indexOf("test")
+    assertTrue(out.spanStyles.any { it.item.textDecoration == TextDecoration.LineThrough && it.start == start && it.end == start + 4 })
+  }
+
+  @Test fun bracketsWithoutATaskStayABullet() {
+    assertEquals("•  [link] text", Markdown.plain("- [link] text"))
   }
 }

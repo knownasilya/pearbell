@@ -18,8 +18,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.em
 
 // A small Markdown renderer for message bodies: **bold**, *italic*, `code`,
-// ~~strike~~, [links](https://…), bare URLs, headings, lists, quotes and
-// fenced code. Only http(s) and mailto links become tappable, so a message
+// ~~strike~~, [links](https://…), bare URLs, headings, lists, task lists
+// (- [ ] and - [x]), quotes and fenced code. Only http(s) and mailto links become tappable, so a message
 // cannot launch other apps through odd URL schemes.
 object Markdown {
   data class Colors(val link: Color, val code: Color, val quote: Color)
@@ -37,6 +37,11 @@ object Markdown {
     return u.startsWith("https://") || u.startsWith("http://") || u.startsWith("mailto:")
   }
 
+  // Task list boxes. The text variant selector keeps ☑ from turning into an emoji.
+  const val UNCHECKED = "☐"
+  const val CHECKED = "☑\uFE0E"
+
+  private val task = Regex("""^\s*(?:[-*+]|\d{1,3}[.)])\s+\[([ xX])]\s+(.*)$""")
   private val heading = Regex("""^(#{1,6})\s+(.*)$""")
   private val bullet = Regex("""^\s*[-*+]\s+(.*)$""")
   private val ordered = Regex("""^\s*(\d{1,3})[.)]\s+(.*)$""")
@@ -76,6 +81,15 @@ object Markdown {
         heading.matchEntire(line)?.let { m ->
           val size = if (m.groupValues[1].length <= 2) 1.15.em else 1.05.em
           out.withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = size)) { inline(m.groupValues[2]) }
+        } ?: task.matchEntire(line)?.let { m ->
+          if (m.groupValues[1] == " ") {
+            out.append("$UNCHECKED  ")
+            inline(m.groupValues[2])
+          } else {
+            out.withStyle(SpanStyle(color = colors.link)) { append(CHECKED) }
+            out.append("  ")
+            out.withStyle(SpanStyle(color = colors.quote, textDecoration = TextDecoration.LineThrough)) { inline(m.groupValues[2]) }
+          }
         } ?: bullet.matchEntire(line)?.let { m ->
           out.append("•  ")
           inline(m.groupValues[1])

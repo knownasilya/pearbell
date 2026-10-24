@@ -270,7 +270,7 @@ private fun QuestionCard(msg: Message, onOpen: () -> Unit, modifier: Modifier = 
         Column(Modifier.weight(1f)) {
           Text(msg.title.ifEmpty { msg.fromName }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            listOf(msg.topic, msg.fromName, shortTime(context, msg.receivedAt, LocalNow.current)).filter { it.isNotEmpty() }.joinToString(" · "),
+            listOf(msg.topic, msg.fromName, messageTime(context, msg, LocalNow.current)).filter { it.isNotEmpty() }.joinToString(" · "),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

@@ -39,8 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -168,29 +166,19 @@ private fun MessageRow(
               }
               Spacer(Modifier.width(8.dp))
               Text(
-                shortTime(context, msg.receivedAt, LocalNow.current),
+                messageTime(context, msg, LocalNow.current),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (msg.updatedAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
               )
             }
             Spacer(Modifier.height(2.dp))
-            var cut by remember(msg.id) { mutableStateOf(false) }
             Text(
               rememberMarkdown(msg.body, links = false),
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               maxLines = 3,
-              overflow = TextOverflow.Ellipsis,
-              onTextLayout = { cut = it.hasVisualOverflow }
+              overflow = TextOverflow.Ellipsis
             )
-            if (cut) {
-              Text(
-                "Tap to read all",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 4.dp)
-              )
-            }
             statusOf(msg)?.let { (icon, text, color) -> Status(icon, text, color) }
           }
         }
@@ -280,9 +268,11 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
       Detail("From", msg.fromName, msg.from.takeIf { it.isNotEmpty() }?.let { it.take(16) + "…" })
       if (msg.topic.isNotEmpty()) Detail("Topic", msg.topic)
       Detail("Received", time.format(msg.receivedAt))
+      msg.updatedAt?.let { Detail("Updated", time.format(it), if (msg.updates > 1) "${msg.updates} updates" else null) }
       if (msg.wantsReply) Detail("Options", msg.actions.joinToString(" · ").ifEmpty { "Free text reply" })
       Detail("Status", status)
       msg.answeredAt?.let { Detail("Replied", time.format(it)) }
+      msg.key?.let { Detail("Sender ID", it, mono = true) }
       Detail("Message ID", msg.id, mono = true)
 
       Spacer(Modifier.height(20.dp))

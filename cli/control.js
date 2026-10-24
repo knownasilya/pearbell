@@ -5,11 +5,12 @@
 //   app -> daemon  { type: 'mac', presence }   first frame
 //   app -> daemon  { type: 'presence', idle, locked, asleep, mode, idleAfter, escalateAfter }
 //   daemon -> app  { type: 'state', computer, devices }
-//   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, notify, route, sentAt }
+//   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, key?, update?, notify, route, sentAt }
 //   app -> daemon  { type: 'ack', id }  or  { type: 'reply', id, text }
 //   daemon -> app  { type: 'routed', id, to, reason }   a question moved on to the phone
 //   daemon -> app  { type: 'closed', id, answer?, device? }
 //   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open
+// key and update work as on the phone (see shared/protocol.js).
 // notify says whether the app shows a notification; otherwise it only keeps
 // the message in its inbox, because the phone got it.
 import { spawn } from 'node:child_process'
@@ -20,7 +21,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { onJSON, writeJSON } from '../shared/lines.js'
-import { clipBody } from '../shared/protocol.js'
+import { cleanKey, clipBody } from '../shared/protocol.js'
 import * as config from './config.js'
 import { SEND_TTL } from './daemon.js'
 import * as service from './service.js'
@@ -110,7 +111,7 @@ function handle (daemon, sock, req) {
     )
   } else if (req.type === 'send') {
     const targets = config.findDevices({ devices: daemon.devices }, req.device)
-    const error = noTarget(daemon, targets, req.device)
+    const error = badKey(req.message?.key, req.message?.update === true) || noTarget(daemon, targets, req.device)
     if (error) {
       reply({ type: 'error', error })
       sock.end()
@@ -125,7 +126,7 @@ function handle (daemon, sock, req) {
       return { targets: now.map(name), connected: now.filter((d) => daemon.isTargetConnected(d.publicKey)).map(name) }
     }
 
-    reply({ type: 'queued', id: entry.id, route: entry.route.to, reason: entry.route.reason, ...where() })
+    reply({ type: 'queued', id: entry.id, key: message.key, route: entry.route.to, reason: entry.route.reason, ...where() })
 
     entry.on('routed', (r) => reply({ type: 'routed', route: r.to, reason: r.reason, ...where() }))
     entry.on('delivered', (d) => reply({ type: 'delivered', device: d.name }))
@@ -150,13 +151,24 @@ export function noTarget (daemon, targets, device) {
 }
 
 export function sanitize (m = {}) {
+  const key = cleanKey(m.key)
+  const update = key !== '' && m.update === true
   return {
     title: String(m.title || ''),
     body: clipBody(String(m.body || '')),
     topic: String(m.topic || '').trim().slice(0, 40),
-    actions: Array.isArray(m.actions) ? m.actions.map(String).slice(0, 3) : [],
-    wantsReply: m.wantsReply === true
+    actions: update || !Array.isArray(m.actions) ? [] : m.actions.map(String).slice(0, 3),
+    // An update edits a message; it is never a question of its own.
+    wantsReply: !update && m.wantsReply === true,
+    ...(key ? { key } : {}),
+    ...(update ? { update } : {})
   }
+}
+
+// Why a message id from a caller can't be used, or null.
+export function badKey (key, update) {
+  if (key === undefined || key === null || key === '') return update ? 'An update needs the id of the message to change' : null
+  return cleanKey(key) ? null : 'A message id is up to 64 characters, without spaces'
 }
 
 // CLI side: connect, starting the daemon in the background if needed.
