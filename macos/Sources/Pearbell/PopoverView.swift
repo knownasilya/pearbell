@@ -621,15 +621,19 @@ struct SwipeBackground: View {
           Image(systemName: "trash").padding(.leading, 20)
           Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.red.opacity(strength))
       } else if offset < 0 {
         HStack {
           Spacer()
           Image(systemName: archived ? "tray.and.arrow.up" : "archivebox").padding(.trailing, 20)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.primary.opacity(strength))
       }
     }
+    // The whole row, not just the icon's height.
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .foregroundStyle(.white)
     .font(.system(size: 15, weight: .semibold))
   }
