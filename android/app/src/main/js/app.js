@@ -4,7 +4,8 @@
 // newline-delimited JSON.
 //
 // Kotlin -> worklet: init, pair, answer, unpair, clear, archive, delete, undelete, rename
-// worklet -> Kotlin: ready, state, message, updated, paired, pair-error, error
+// worklet -> Kotlin: ready, state, message, updated, edited, paired, pair-error, error
+// (edited: the sender changed a message with an update, see shared/protocol.js)
 import fs from 'bare-fs'
 import path from 'bare-path'
 import DHT from 'hyperdht'

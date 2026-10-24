@@ -63,7 +63,14 @@ object Notifier {
     context.getSystemService(NotificationManager::class.java).notify(SERVICE_ID, serviceNotification(context, peers))
   }
 
-  fun showMessage(context: Context, msg: Message) {
+  // An update changed the message: new text in its notification, if that is
+  // still showing, without a sound.
+  fun refresh(context: Context, msg: Message) {
+    val nm = context.getSystemService(NotificationManager::class.java)
+    if (nm.activeNotifications.any { it.id == notificationId(msg.id) }) showMessage(context, msg, quiet = true)
+  }
+
+  fun showMessage(context: Context, msg: Message, quiet: Boolean = false) {
     val nm = context.getSystemService(NotificationManager::class.java)
     val builder = Notification.Builder(context, CHANNEL_MESSAGES)
       .setSmallIcon(R.drawable.ic_bell)
@@ -77,6 +84,7 @@ object Notifier {
       .setContentIntent(openMessage(context, msg.id))
       .setAutoCancel(!msg.wantsReply)
       .setCategory(Notification.CATEGORY_MESSAGE)
+      .setOnlyAlertOnce(quiet)
 
     if (msg.wantsReply) {
       // Android shows three buttons at most; keep one for the text reply.

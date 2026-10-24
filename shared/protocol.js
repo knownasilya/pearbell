@@ -13,10 +13,15 @@
 //   phone -> computer  { type: 'name', name }    the phone was renamed
 //   computer -> phone  { type: 'hello', name }   its current name
 //   phone -> computer  { type: 'pending', ids }   questions it still shows as open
-//   computer -> phone  { type: 'msg', id, title, topic, body, actions, wantsReply }
+//   computer -> phone  { type: 'msg', id, title, topic, body, actions, wantsReply, key?, update? }
 //   phone -> computer  { type: 'ack', id }
 //   phone -> computer  { type: 'reply', id, text }
 //   computer -> phone  { type: 'closed', id }   nobody waits for a reply any more
+//
+// key is an id the sender picked (pearbell send --id). A msg with update: true
+// edits the newest message from the same computer with that key instead of
+// adding one: it takes the new body, and the title and topic when given. When
+// there is no such message (deleted, or never got it), it shows as a new one.
 import b4a from 'b4a'
 import z32 from 'z32'
 
@@ -31,6 +36,15 @@ export function clipBody (body) {
   const keep = MAX_BODY - 64 // room for the note
   const note = `\n\n… (cut: ${(body.length - keep).toLocaleString('en-US')} more characters)`
   return body.slice(0, keep) + note
+}
+
+// A sender-supplied message id: up to 64 characters, no whitespace.
+export const MAX_KEY = 64
+
+export function cleanKey (key) {
+  if (typeof key !== 'string') return ''
+  const k = key.trim()
+  return k.length <= MAX_KEY && !/\s/.test(k) ? k : ''
 }
 
 export function encodePairCode (publicKey, token) {

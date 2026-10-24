@@ -226,6 +226,22 @@ test('mac: the CLI request reports the route', async (t) => {
   t.is(frames[1].device, 'this Mac')
 })
 
+test('mac: the app gets the id and updates', async (t) => {
+  const { daemon, device } = await setup(t)
+  const mac = await connectMac(t)
+
+  const first = daemon.send({ message: control.sanitize({ body: '- [ ] one', key: 'list' }), targets: [device] })
+  await once(first, 'delivered')
+  const next = daemon.send({ message: control.sanitize({ body: '- [x] one', key: 'list', update: true }), targets: [device] })
+  await once(next, 'delivered')
+
+  t.is(mac.messages[0].key, 'list')
+  t.absent(mac.messages[0].update)
+  t.is(mac.messages[1].key, 'list')
+  t.is(mac.messages[1].update, true)
+  t.is(mac.messages[1].body, '- [x] one')
+})
+
 function once (emitter, name) {
   return new Promise((resolve) => emitter.once(name, resolve))
 }

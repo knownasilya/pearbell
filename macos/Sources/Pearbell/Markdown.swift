@@ -3,13 +3,14 @@ import SwiftUI
 
 // A small Markdown renderer for message bodies, like the Android app's
 // (android/app/src/main/java/dev/pearbell/ui/Markdown.kt): **bold**, *italic*,
-// `code`, ~~strike~~, [links](https://…), bare URLs, headings, lists, quotes
-// and fenced code. Only http(s) and mailto links open, so a message cannot
+// `code`, ~~strike~~, [links](https://…), bare URLs, headings, lists, task
+// lists (- [ ] and - [x]), quotes and fenced code. Only http(s) and mailto links open, so a message cannot
 // launch other apps through odd URL schemes.
 enum MarkdownBlock: Hashable {
   case paragraph(String)
   case heading(Int, String)
   case bullet(String)
+  case task(Bool, String)
   case ordered(String, String)
   case quote(String)
   case code(String)
@@ -48,6 +49,9 @@ enum Markdown {
       } else if let m = line.firstMatch(of: #/^(#{1,6})\s+(.*)$/#) {
         flush()
         blocks.append(.heading(m.1.count, String(m.2)))
+      } else if let m = line.firstMatch(of: #/^\s*(?:[-*+]|\d{1,3}[.)])\s+\[([ xX])\]\s+(.*)$/#) {
+        flush()
+        blocks.append(.task(m.1 != " ", String(m.2)))
       } else if let m = line.firstMatch(of: #/^\s*[-*+]\s+(.*)$/#) {
         flush()
         blocks.append(.bullet(String(m.1)))
@@ -101,6 +105,7 @@ enum Markdown {
       switch block {
       case .paragraph(let s), .heading(_, let s), .quote(let s): return String(inline(s).characters)
       case .bullet(let s): return "• " + String(inline(s).characters)
+      case .task(let done, let s): return (done ? "☑ " : "☐ ") + String(inline(s).characters)
       case .ordered(let n, let s): return "\(n). " + String(inline(s).characters)
       case .code(let s): return s
       }
@@ -141,6 +146,17 @@ struct MarkdownText: View {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         Text("•")
         line(Text(Markdown.inline(s)))
+      }
+    case .task(let done, let s):
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Image(systemName: done ? "checkmark.square.fill" : "square")
+          .foregroundStyle(done ? Palette.primary : Palette.onSurfaceVariant)
+          .accessibilityLabel(done ? "Done" : "To do")
+        if done {
+          line(Text(Markdown.inline(s)).strikethrough().foregroundColor(Palette.onSurfaceVariant))
+        } else {
+          line(Text(Markdown.inline(s)))
+        }
       }
     case .ordered(let n, let s):
       HStack(alignment: .firstTextBaseline, spacing: 6) {

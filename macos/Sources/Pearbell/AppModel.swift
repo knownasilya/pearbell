@@ -252,7 +252,15 @@ final class AppModel: ObservableObject {
       daemon.send(["type": "ack", "id": id])
       let route = frame.route?.to ?? "mac"
       let reason = frame.route?.reason ?? ""
-      if let i = messages.firstIndex(where: { $0.id == id }) {
+      // An update edits the newest message with its key, quietly (see shared/protocol.js).
+      if frame.update == true, let key = frame.key, let i = messages.firstIndex(where: { $0.key == key }) {
+        if let title = frame.title, !title.isEmpty { messages[i].title = title }
+        if let topic = frame.topic, !topic.isEmpty { messages[i].topic = topic }
+        messages[i].body = frame.body ?? ""
+        messages[i].updatedAt = Date()
+        messages[i].updates += 1
+        notifier.refresh(messages[i])
+      } else if let i = messages.firstIndex(where: { $0.id == id }) {
         messages[i].route = route
         messages[i].reason = reason
       } else {
@@ -268,7 +276,8 @@ final class AppModel: ObservableObject {
           reason: reason,
           answer: nil,
           answeredBy: nil,
-          closed: false
+          closed: false,
+          key: frame.key
         )
         messages.insert(message, at: 0)
         messages.sort { $0.receivedAt > $1.receivedAt }

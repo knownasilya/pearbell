@@ -82,6 +82,26 @@ test('http: wait times out with 504', async (t) => {
   t.is(res.json.error, 'timeout')
 })
 
+test('http: update changes the message with that id', async (t) => {
+  const got = []
+  const { call, phone } = await setup(t, (m) => got.push(m))
+
+  const sent = await call('/send', { id: 'deploy', body: '- [ ] build' })
+  t.is(sent.status, 200)
+  t.is(sent.json.key, 'deploy')
+
+  const updated = await call('/update', { id: 'deploy', body: '- [x] build', title: 'Deploy' })
+  t.is(updated.status, 200)
+  t.is(got.length, 1, 'no new message')
+  t.is(phone.state.messages[0].body, '- [x] build')
+  t.is(phone.state.messages[0].title, 'Deploy')
+  t.ok(phone.state.messages[0].updatedAt)
+
+  t.is((await call('/update', { body: 'no id' })).status, 400)
+  t.is((await call('/update', { id: 'deploy', body: 'x', wait: true })).status, 400)
+  t.is((await call('/send', { id: 'two words', body: 'x' })).status, 400)
+})
+
 test('http: bad input', async (t) => {
   const { call } = await setup(t)
   t.is((await call('/send', { title: 'no body' })).status, 400)

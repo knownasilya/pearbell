@@ -18,6 +18,9 @@ Usage:
   pearbell pair                      Show a code for the phone app to scan
   pearbell send <text...>            Send a notification
   pearbell ask <text...>             Send and wait for a reply (prints it)
+  pearbell update <id> <text...>     Change the message sent with --id <id>
+                                     (new text; -t and -T change the title
+                                     and topic too). No new notification
   pearbell devices                   List paired phones, who is online and the Mac
   pearbell unpair <name|key>         Forget a phone
   pearbell daemon                    Run the background daemon in the
@@ -31,10 +34,12 @@ Usage:
                                      Keep the daemon running from login on
                                      (macOS launch agent)
 
-Options for send and ask:
+Options for send, ask and update:
   -t, --title <title>                Notification title
   -T, --topic <topic>                Group messages under a topic in the app
   -a, --actions <a,b,c>              Up to 3 quick-reply buttons
+  -i, --id <id>                      Your own id for the message, so that
+                                     pearbell update <id> can change it
   -d, --device <name|key>            Only this phone (default: all)
       --to <auto|mac|phone|all>      Where to show it. auto (default) uses
                                      the Mac while you are at it and the
@@ -46,7 +51,9 @@ Options for send and ask:
       --json                         Print the result as JSON
   -q, --quiet                        No progress output on stderr
 
-Text "-" or no text reads the message from stdin. A phone that is offline
+Text "-" or no text reads the message from stdin. Messages are Markdown;
+"- [ ] task" and "- [x] task" lines show as a checklist, so send one with
+--id and tick tasks off with pearbell update. A phone that is offline
 gets queued messages when it connects again (for up to a day).
 Exit codes: 0 ok, 1 error, 2 timeout.`
 
@@ -56,6 +63,7 @@ const { values: opts, positionals } = parseArgs({
     title: { type: 'string', short: 't' },
     topic: { type: 'string', short: 'T' },
     actions: { type: 'string', short: 'a' },
+    id: { type: 'string', short: 'i' },
     device: { type: 'string', short: 'd' },
     to: { type: 'string' },
     wait: { type: 'boolean', short: 'w' },
@@ -91,6 +99,7 @@ async function run () {
     case 'pair': return runPair()
     case 'send': return runSend(opts.wait === true)
     case 'ask': return runSend(true)
+    case 'update': return runSend(false, true)
     case 'devices': return runDevices()
     case 'unpair': return runUnpair()
     case 'daemon': return runDaemon()
@@ -122,7 +131,12 @@ async function runPair () {
   return 0
 }
 
-async function runSend (wantsReply) {
+async function runSend (wantsReply, update = false) {
+  const key = update ? rest.shift() : opts.id
+  const bad = control.badKey(key, update)
+  if (bad) throw new Error(update ? `${bad}. Use: pearbell update <id> <text...>` : bad)
+  if (update && (wantsReply || opts.wait || opts.actions)) throw new Error('An update changes the text of a message; it can\'t ask a question')
+
   const body = await readBody()
   if (!body) throw new Error('Nothing to send')
   if (body.length > MAX_BODY) log(`message is ${body.length} characters; the phone keeps the first ${MAX_BODY}`)
@@ -133,7 +147,7 @@ async function runSend (wantsReply) {
   if (opts.to && !control.ROUTES.includes(opts.to)) throw new Error(`--to takes one of ${control.ROUTES.join(', ')}`)
 
   const actions = opts.actions ? opts.actions.split(',').map((a) => a.trim()).filter(Boolean) : []
-  const message = { title: opts.title || '', topic: opts.topic || '', body, actions, wantsReply }
+  const message = { title: opts.title || '', topic: opts.topic || '', body, actions, wantsReply, key, update }
 
   const sock = await control.connect()
   const delivered = new Set()
@@ -149,6 +163,7 @@ async function runSend (wantsReply) {
   await control.request(sock, { type: 'send', message, device: opts.device, route: opts.to, timeout: seconds * 1000 || undefined }, (frame) => {
     if (frame.type === 'queued' || frame.type === 'routed') {
       queued = { ...queued, ...frame }
+      if (frame.type === 'queued' && key && frame.key !== key) log('the running daemon is older and ignores message ids; restart it with: pearbell stop')
       if (frame.type === 'routed' || frame.reason !== 'the menu bar app is not running') {
         log(frame.type === 'routed' ? `also sent to the phone: ${frame.reason}` : `routed to ${where(frame.route)}: ${frame.reason}`)
       }
@@ -172,14 +187,14 @@ async function runSend (wantsReply) {
     if (!reply) {
       throw new TimeoutError(timedOut ? `No reply within ${seconds}s` : 'The daemon stopped')
     }
-    if (opts.json) console.log(JSON.stringify({ id: queued.id, reply: reply.text, device: reply.device }))
+    if (opts.json) console.log(JSON.stringify({ id: queued.id, ...(key ? { key } : {}), reply: reply.text, device: reply.device }))
     else console.log(reply.text)
     return 0
   }
 
   const missing = queued.targets.filter((n) => !delivered.has(n))
   if (missing.length) log(`${missing.join(', ')} offline; the message waits in the queue`)
-  if (opts.json) console.log(JSON.stringify({ id: queued.id, route: queued.route, delivered: [...delivered], queued: missing }))
+  if (opts.json) console.log(JSON.stringify({ id: queued.id, ...(key ? { key } : {}), route: queued.route, delivered: [...delivered], queued: missing }))
   return 0
 }
 

@@ -2,16 +2,20 @@
 // (a Kody job, a CI webhook relay, Shortcuts). Listens on 127.0.0.1 only, and
 // every request needs the token from `pearbell http on`.
 //
-//   POST /send  { body, title?, topic?, actions?, device?, to?, wait?, timeout? }
+//   POST /send  { body, title?, topic?, actions?, id?, device?, to?, wait?, timeout? }
 //     (a body over 16,000 characters is cut, and the reply has truncated: true)
-//     -> 200 { id, route, delivered, queued } without wait
+//     id is your own id for the message, for /update
+//     -> 200 { id, route, delivered, queued } without wait (and key: your id)
 //     -> 200 { id, reply, device }           with wait
 //     -> 504 { error: 'timeout' }            no reply (or no delivery) in time
+//   POST /update  { id, body, title?, topic?, device?, to?, timeout? }
+//     changes the message sent with that id, without a new notification
+//     -> 200 { id, route, delivered, queued }  as /send
 //   GET /devices -> [{ name, publicKey, connected }]
 import { timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import * as config from './config.js'
-import { ROUTES, noTarget, sanitize } from './control.js'
+import { ROUTES, badKey, noTarget, sanitize } from './control.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import { SEND_TTL } from './daemon.js'
 
@@ -38,7 +42,8 @@ async function handle (daemon, token, req, res) {
     return reply(res, 200, daemon.devices.map((d) => ({ name: d.name, publicKey: d.publicKey, connected: daemon.isConnected(d.publicKey) })))
   }
 
-  if (req.method !== 'POST' || url.pathname !== '/send') return reply(res, 404, { error: 'not found' })
+  const update = url.pathname === '/update'
+  if (req.method !== 'POST' || (url.pathname !== '/send' && !update)) return reply(res, 404, { error: 'not found' })
 
   let input
   try {
@@ -48,7 +53,11 @@ async function handle (daemon, token, req, res) {
   }
 
   const actions = typeof input.actions === 'string' ? input.actions.split(',').map((a) => a.trim()).filter(Boolean) : input.actions
-  const message = sanitize({ ...input, actions, wantsReply: input.wait === true })
+  const keyError = badKey(input.id, update)
+  if (keyError) return reply(res, 400, { error: keyError })
+  if (update && (input.wait === true || input.actions)) return reply(res, 400, { error: 'an update cannot ask a question' })
+
+  const message = sanitize({ ...input, actions, key: input.id, update, wantsReply: input.wait === true })
   const truncated = typeof input.body === 'string' && input.body.length > MAX_BODY
   if (!message.body.trim()) return reply(res, 400, { error: 'body is required' })
 
@@ -71,7 +80,7 @@ async function handle (daemon, token, req, res) {
       if (done) return
       done = true
       clearTimeout(timer)
-      reply(res, status, truncated ? { ...body, truncated } : body)
+      reply(res, status, { ...body, ...(message.key ? { key: message.key } : {}), ...(truncated ? { truncated } : {}) })
       resolve()
     }
 

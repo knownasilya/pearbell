@@ -295,9 +295,9 @@ struct MessageRow: View {
             .lineLimit(1)
           if !message.topic.isEmpty { TopicTag(topic: message.topic) }
           Spacer()
-          Text(ago(message.receivedAt))
+          Text(messageTime(message))
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(Palette.onSurfaceVariant)
+            .foregroundStyle(message.updatedAt == nil ? Palette.onSurfaceVariant : Palette.primary)
         }
         Text(plainText(message.body))
           .font(.system(size: 13))
@@ -412,12 +412,17 @@ struct EmptyInbox: View {
 }
 
 func subtitle(_ message: Message) -> String {
-  let when = ago(message.receivedAt)
+  let when = messageTime(message)
   switch message.route {
   case "both": return "\(when) · also on your phone"
   case "phone": return "\(when) · sent to your phone"
   default: return when
   }
+}
+
+// When it came, or when an update last changed it: "updated 4 min".
+func messageTime(_ message: Message) -> String {
+  message.updatedAt.map { "updated \(ago($0))" } ?? ago(message.receivedAt)
 }
 
 func ago(_ date: Date) -> String {
@@ -467,6 +472,14 @@ struct MessageDetail: View {
                 Text(message.receivedAt.formatted(date: .complete, time: .shortened))
                   .font(.system(size: 11, weight: .medium))
                   .foregroundStyle(Palette.onSurfaceVariant)
+              }
+              if let updated = message.updatedAt {
+                Label(
+                  "Updated \(updated.formatted(date: .omitted, time: .shortened))" + (message.updates > 1 ? " · \(message.updates) updates" : ""),
+                  systemImage: "pencil"
+                )
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Palette.primary)
               }
             }
           }

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.pearbell.Message
 import dev.pearbell.R
 import java.util.Calendar
 import kotlinx.coroutines.delay
@@ -81,6 +82,10 @@ fun shortTime(context: Context, at: Long, now: Long): String {
     else -> DateFormat.getTimeFormat(context).format(at)
   }
 }
+
+// The message's time, or when an update last changed it: "updated 4m".
+fun messageTime(context: Context, msg: Message, now: Long): String =
+  msg.updatedAt?.let { "updated ${shortTime(context, it, now)}" } ?: shortTime(context, msg.receivedAt, now)
 
 fun dayLabel(context: Context, at: Long): String {
   val today = Calendar.getInstance()

@@ -7,7 +7,7 @@
 import DHT from 'hyperdht'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from './lines.js'
-import { clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
+import { cleanKey, clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
 
 const MAX_MESSAGES = 200
 const MAX_TOPIC = 40
@@ -227,13 +227,23 @@ export class Phone {
     this._emitState()
   }
 
+  // The newest message from this computer with the sender's id.
+  findByKey (from, key) {
+    return this.state.messages.find((m) => m.from === from && m.key === key) || null
+  }
+
   _onmessage (link, incoming) {
+    const key = cleanKey(incoming.key)
+    const edits = incoming.update === true && key ? this.findByKey(link.peer.publicKey, key) : null
+    if (edits) return this._onupdate(link, incoming, edits)
+
     // The computer resends after a dropped connection, so the id may be known.
     let msg = this.findMessage(incoming.id)
 
     if (!msg) {
       msg = {
         id: incoming.id,
+        key: key || null,
         from: link.peer.publicKey,
         fromName: link.peer.name,
         title: str(incoming.title, 200),
@@ -245,7 +255,9 @@ export class Phone {
         answer: null,
         answeredAt: null,
         closed: false,
-        archived: false
+        archived: false,
+        updatedAt: null,
+        updates: 0
       }
 
       this.state.messages.unshift(msg)
@@ -256,6 +268,25 @@ export class Phone {
 
     link.send({ type: 'ack', id: msg.id })
     if (msg.answer !== null && !msg.closed) link.send({ type: 'reply', id: msg.id, text: msg.answer })
+  }
+
+  // An update for a message we have: new text in place, no new notification.
+  _onupdate (link, incoming, msg) {
+    // A resend of the last update (its ack got lost) changes nothing.
+    if (msg.lastUpdate === incoming.id) return link.send({ type: 'ack', id: incoming.id })
+
+    const title = str(incoming.title, 200)
+    const topic = str(incoming.topic, MAX_TOPIC).trim()
+    msg.body = clipBody(str(incoming.body, Infinity))
+    if (title) msg.title = title
+    if (topic) msg.topic = topic
+    msg.updatedAt = Date.now()
+    msg.updates = (msg.updates || 0) + 1
+    msg.lastUpdate = incoming.id
+
+    this.save()
+    this.emit({ type: 'edited', message: msg })
+    link.send({ type: 'ack', id: incoming.id })
   }
 
   _onclosed (id) {

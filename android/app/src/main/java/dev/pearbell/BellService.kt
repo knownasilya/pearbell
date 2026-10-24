@@ -170,6 +170,11 @@ class BellService : Service() {
         Hub.upsert(msg)
         if (!msg.open) Notifier.cancel(this, msg.id)
       }
+      "edited" -> {
+        val msg = Hub.parseMessage(event.getJSONObject("message"))
+        Hub.upsert(msg)
+        Notifier.refresh(this, msg)
+      }
       "paired" -> Hub.pairing.value = Pairing.Done(event.getJSONObject("peer").optString("name"))
       "pair-error" -> Hub.pairing.value = Pairing.Failed(event.optString("error"))
       "error" -> {

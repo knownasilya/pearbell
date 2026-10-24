@@ -4,6 +4,7 @@ import DHT from 'hyperdht'
 import { Phone } from '../shared/phone.js'
 import { Daemon } from '../cli/daemon.js'
 import { clipBody, MAX_BODY } from '../shared/protocol.js'
+import { badKey, sanitize } from '../cli/control.js'
 
 async function setup (t) {
   const testnet = await createTestnet(3, t.teardown)
@@ -207,6 +208,53 @@ test('an over-long body is cut with a note, never silently', (t) => {
   const cut = clipBody('x'.repeat(20_000))
   t.ok(cut.length <= MAX_BODY)
   t.ok(cut.endsWith(`… (cut: ${(20_000 - (MAX_BODY - 64)).toLocaleString('en-US')} more characters)`))
+})
+
+test('an update edits the message with that id, quietly', async (t) => {
+  const { daemon, phone, events, device } = await setup(t)
+
+  const first = daemon.send({ message: sanitize({ title: 'Release', body: '- [ ] tests\n- [ ] ship', key: 'rel-1' }), targets: [device] })
+  await once(first, 'delivered')
+  const original = phone.findByKey(phone.state.peers[0].publicKey, 'rel-1')
+  t.is(original.key, 'rel-1')
+  t.is(original.updatedAt, null)
+
+  const next = daemon.send({ message: sanitize({ body: '- [x] tests\n- [ ] ship', key: 'rel-1', update: true }), targets: [device] })
+  await once(next, 'delivered')
+
+  t.is(phone.state.messages.length, 1, 'no new message')
+  const msg = phone.findMessage(original.id)
+  t.is(msg.body, '- [x] tests\n- [ ] ship')
+  t.is(msg.title, 'Release', 'an update without a title keeps it')
+  t.ok(msg.updatedAt)
+  t.is(msg.updates, 1)
+  t.is(events.filter((e) => e.type === 'message').length, 1, 'no second notification')
+  t.ok(events.find((e) => e.type === 'edited' && e.message.id === original.id))
+})
+
+test('an update for an unknown id shows as a new message', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const entry = daemon.send({ message: sanitize({ title: 'Late', body: 'step 2 of 3', key: 'job', update: true }), targets: [device] })
+  await once(entry, 'delivered')
+  t.is(phone.state.messages.length, 1)
+  t.is(phone.state.messages[0].key, 'job')
+  t.is(phone.state.messages[0].body, 'step 2 of 3')
+})
+
+test('message ids are checked and updates never ask', (t) => {
+  t.is(badKey(undefined, false), null)
+  t.ok(badKey(undefined, true))
+  t.ok(badKey('has space', false))
+  t.ok(badKey('x'.repeat(65), false))
+  t.is(badKey('deploy-42', true), null)
+
+  const m = sanitize({ body: 'x', key: ' k ', update: true, wantsReply: true, actions: ['a'] })
+  t.is(m.key, 'k')
+  t.is(m.update, true)
+  t.is(m.wantsReply, false)
+  t.alike(m.actions, [])
+  t.absent('key' in sanitize({ body: 'x' }))
 })
 
 test('unknown keys cannot connect', async (t) => {

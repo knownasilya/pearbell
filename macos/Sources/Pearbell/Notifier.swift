@@ -12,18 +12,32 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
   private let center = UNUserNotificationCenter.current()
   private var categories: [String: UNNotificationCategory] = [:]
   private var actions: [String: [String]] = [:]
+  // Notifications being refreshed after an update: no banner, no sound.
+  private var quiet: Set<String> = []
 
   func setUp() {
     center.delegate = self
     center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
   }
 
-  func show(_ message: Message) {
+  // An update changed the message: new text in its notification, if that is
+  // still showing.
+  func refresh(_ message: Message) {
+    center.getDeliveredNotifications { delivered in
+      guard delivered.contains(where: { $0.request.identifier == message.id }) else { return }
+      DispatchQueue.main.async {
+        self.quiet.insert(message.id)
+        self.show(message, sound: false)
+      }
+    }
+  }
+
+  func show(_ message: Message, sound: Bool = true) {
     let content = UNMutableNotificationContent()
     content.title = message.sender
     if !message.topic.isEmpty { content.subtitle = message.topic }
     content.body = plainText(message.body)
-    content.sound = .default
+    content.sound = sound ? .default : nil
     content.threadIdentifier = message.topic.isEmpty ? "pearbell" : message.topic
 
     if message.wantsReply {
@@ -62,7 +76,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    completionHandler([.banner, .sound, .list])
+    let id = notification.request.identifier
+    DispatchQueue.main.async {
+      completionHandler(self.quiet.remove(id) != nil ? [.list] : [.banner, .sound, .list])
+    }
   }
 
   func userNotificationCenter(
