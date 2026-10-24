@@ -10,9 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
   private var changes: AnyCancellable?
   private var closedAt = Date.distantPast
   private var icon = ""
+  private var count = -1
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     item.button?.target = self
     item.button?.action = #selector(toggle)
 
@@ -70,6 +71,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
       let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "pearbell")
       image?.isTemplate = true
       item.button?.image = image
+    }
+    // How many questions wait, next to the bell.
+    let waiting = model.link == .connected ? model.waiting.count : 0
+    if waiting != count {
+      count = waiting
+      item.button?.imagePosition = .imageLeading
+      item.button?.attributedTitle = NSAttributedString(
+        string: waiting > 0 ? "\(waiting)" : "",
+        attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)]
+      )
     }
     item.button?.toolTip = model.waiting.isEmpty ? "pearbell" : "pearbell: \(model.waiting.count) waiting for you"
   }
