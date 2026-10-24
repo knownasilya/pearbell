@@ -25,7 +25,17 @@ final class AppModel: ObservableObject {
   @Published private(set) var link: Link = .connecting
   @Published private(set) var computer = Host.current().localizedName ?? "this Mac"
   @Published private(set) var devices: [Device] = []
-  @Published private(set) var messages: [Message] = []
+  @Published private(set) var messages: [Message] = [] {
+    didSet {
+      // The topic picked in the inbox went away with its last message.
+      if let topic, !messages.contains(where: { $0.topic == topic }) { self.topic = nil }
+      if let focused, !messages.contains(where: { $0.id == focused }) { self.focused = nil }
+    }
+  }
+  // The message open in the popover, or nil for the inbox.
+  @Published var focused: String?
+  // The topic the inbox shows, or nil for all.
+  @Published var topic: String?
   // Why new messages go to the phone right now, or nil when they come here.
   @Published private(set) var away: String?
   @Published var startError: String?
@@ -38,6 +48,19 @@ final class AppModel: ObservableObject {
 
   var waiting: [Message] { messages.filter(\.waiting) }
   var recent: [Message] { messages.filter { !$0.waiting } }
+  var shownWaiting: [Message] { waiting.filter(inTopic) }
+  var shownRecent: [Message] { recent.filter(inTopic) }
+
+  // Topics in the inbox, most used first, like the phone.
+  var topics: [(name: String, count: Int)] {
+    Dictionary(grouping: messages.map(\.topic).filter { !$0.isEmpty }, by: { $0 })
+      .map { (name: $0.key, count: $0.value.count) }
+      .sorted { $0.count != $1.count ? $0.count > $1.count : $0.name.lowercased() < $1.name.lowercased() }
+  }
+
+  private func inTopic(_ message: Message) -> Bool {
+    topic == nil || message.topic == topic
+  }
   var onlinePhones: [Device] { devices.filter(\.connected) }
 
   private let daemon = DaemonLink()
@@ -74,8 +97,10 @@ final class AppModel: ObservableObject {
     notifier.onAnswer = { [weak self] id, text in
       self?.answer(id, text)
     }
-    notifier.onOpen = { [weak self] in
-      self?.onOpen()
+    notifier.onOpen = { [weak self] id in
+      guard let self else { return }
+      self.focused = self.messages.contains(where: { $0.id == id }) ? id : nil
+      self.onOpen()
     }
   }
 

@@ -10,6 +10,8 @@ struct PopoverView: View {
     VStack(spacing: 0) {
       if showSettings {
         SettingsView(close: { showSettings = false })
+      } else if let id = model.focused, let message = model.messages.first(where: { $0.id == id }) {
+        MessageDetail(message: message)
       } else {
         header
         ScrollView {
@@ -21,14 +23,14 @@ struct PopoverView: View {
             if model.waiting.isEmpty && model.recent.isEmpty {
               EmptyInbox()
             } else {
-              if !model.waiting.isEmpty {
-                SectionTitle(text: "Waiting for you", count: model.waiting.count)
-                ForEach(model.waiting) { message in
-                  QuestionCard(message: message)
+              if !model.shownWaiting.isEmpty {
+                SectionTitle(text: "Waiting for you", count: model.shownWaiting.count)
+                ForEach(model.shownWaiting) { message in
+                  QuestionCard(message: message, shortcuts: message.id == model.shownWaiting.first?.id)
                     .padding(.bottom, 12)
                 }
               }
-              if !model.recent.isEmpty {
+              if !model.shownRecent.isEmpty {
                 HStack {
                   SectionTitle(text: "Recent")
                   Spacer()
@@ -39,7 +41,7 @@ struct PopoverView: View {
                     .padding(.top, 8)
                 }
                 VStack(spacing: 2) {
-                  ForEach(model.recent) { message in
+                  ForEach(model.shownRecent) { message in
                     MessageRow(message: message)
                   }
                 }
@@ -68,6 +70,7 @@ struct PopoverView: View {
       }
       StatusPill()
       RouteLine()
+      TopicChips()
     }
     .padding(.horizontal, 20)
     .padding(.top, 16)
@@ -167,7 +170,8 @@ struct SectionTitle: View {
 struct QuestionCard: View {
   @EnvironmentObject var model: AppModel
   let message: Message
-  @State private var draft = ""
+  // ⌘1…⌘3 pick its quick replies; only one card on screen gets them.
+  var shortcuts = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -183,19 +187,43 @@ struct QuestionCard: View {
             .lineLimit(1)
         }
       }
+      .contentShape(Rectangle())
+      .onTapGesture { model.focused = message.id }
+      .help("Open the message")
 
-      Text(markdown(message.body))
-        .font(.system(size: 15))
-        .lineSpacing(3)
-        .textSelection(.enabled)
-        .fixedSize(horizontal: false, vertical: true)
+      MarkdownText(text: message.body, size: 15, selectable: true)
         .padding(.top, 12)
 
+      QuestionReplies(message: message, shortcuts: shortcuts)
+    }
+    .padding(16)
+    .background(
+      RoundedRectangle(cornerRadius: 22, style: .continuous)
+        .fill(Palette.primaryContainer.opacity(0.45))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 22, style: .continuous)
+        .strokeBorder(Palette.primary.opacity(0.35), lineWidth: 1)
+    )
+  }
+}
+
+// The quick replies and the reply field of an open question.
+struct QuestionReplies: View {
+  @EnvironmentObject var model: AppModel
+  let message: Message
+  var shortcuts = false
+  @State private var draft = ""
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
       if !message.actions.isEmpty {
         HStack(spacing: 8) {
           ForEach(Array(message.actions.enumerated()), id: \.offset) { i, label in
             Button(label) { model.answer(message.id, label) }
               .buttonStyle(PillButtonStyle(filled: i == 0))
+              .shortcut(shortcuts && i < 3 ? KeyEquivalent(Character("\(i + 1)")) : nil)
+              .help(shortcuts && i < 3 ? "⌘\(i + 1)" : label)
           }
         }
         .padding(.top, 14)
@@ -219,15 +247,6 @@ struct QuestionCard: View {
       .background(Capsule().fill(Palette.surfaceLowest))
       .padding(.top, 12)
     }
-    .padding(16)
-    .background(
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .fill(Palette.primaryContainer.opacity(0.45))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .strokeBorder(Palette.primary.opacity(0.35), lineWidth: 1)
-    )
     .disabled(model.link != .connected)
   }
 
@@ -243,7 +262,6 @@ struct QuestionCard: View {
 struct MessageRow: View {
   @EnvironmentObject var model: AppModel
   let message: Message
-  @State private var expanded = false
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -253,24 +271,16 @@ struct MessageRow: View {
           Text(message.sender)
             .font(.system(size: 13, weight: .semibold))
             .lineLimit(1)
-          if !message.topic.isEmpty {
-            Text(message.topic)
-              .font(.system(size: 10, weight: .medium))
-              .foregroundStyle(Palette.onSurfaceVariant)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 1)
-              .background(Capsule().fill(Palette.surfaceContainer))
-          }
+          if !message.topic.isEmpty { TopicTag(topic: message.topic) }
           Spacer()
           Text(ago(message.receivedAt))
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(Palette.onSurfaceVariant)
         }
-        Text(markdown(message.body))
+        Text(plainText(message.body))
           .font(.system(size: 13))
           .foregroundStyle(Palette.onSurfaceVariant)
-          .lineLimit(expanded ? nil : 3)
-          .textSelection(.enabled)
+          .lineLimit(3)
         if let answer = message.answer {
           Label(message.answeredBy.map { "Answered on \($0): “\(answer)”" } ?? "You replied “\(answer)”", systemImage: "checkmark")
             .font(.system(size: 12, weight: .semibold))
@@ -295,7 +305,7 @@ struct MessageRow: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.surfaceLow)
     .contentShape(Rectangle())
-    .onTapGesture { expanded.toggle() }
+    .onTapGesture { model.focused = message.id }
     .contextMenu {
       Button("Copy text") {
         NSPasteboard.general.clearContents()
@@ -389,4 +399,142 @@ func ago(_ date: Date) -> String {
   if seconds < 3600 { return "\(Int(seconds / 60)) min" }
   if Calendar.current.isDateInToday(date) { return date.formatted(date: .omitted, time: .shortened) }
   return date.formatted(.dateTime.month(.abbreviated).day())
+}
+
+// One message, opened from its notification or the inbox, like the phone's
+// message details.
+struct MessageDetail: View {
+  @EnvironmentObject var model: AppModel
+  let message: Message
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        IconButton(symbol: "chevron.left", label: "Back to the inbox") { model.focused = nil }
+          .keyboardShortcut(.cancelAction)
+        Spacer()
+        IconButton(symbol: "doc.on.doc", label: "Copy text") {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(message.body, forType: .string)
+        }
+      }
+      .padding(.horizontal, 20)
+      .padding(.top, 16)
+      .padding(.bottom, 8)
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          HStack(spacing: 12) {
+            Avatar(name: message.sender, size: 44)
+            VStack(alignment: .leading, spacing: 4) {
+              Text(message.sender)
+                .font(.system(size: 18, weight: .semibold))
+                .textSelection(.enabled)
+              HStack(spacing: 6) {
+                if !message.topic.isEmpty { TopicTag(topic: message.topic) }
+                Text(message.receivedAt.formatted(date: .complete, time: .shortened))
+                  .font(.system(size: 11, weight: .medium))
+                  .foregroundStyle(Palette.onSurfaceVariant)
+              }
+            }
+          }
+
+          if message.route == "phone" || message.route == "both" {
+            Label("Sent to your phone: \(message.reason)", systemImage: "iphone")
+              .font(.system(size: 11))
+              .foregroundStyle(Palette.outline)
+              .padding(.top, 10)
+          }
+
+          MarkdownText(text: message.body, size: 14, selectable: true)
+            .padding(.top, 16)
+
+          if message.waiting {
+            QuestionReplies(message: message, shortcuts: true)
+              .padding(.top, 4)
+          } else if let answer = message.answer {
+            Label(message.answeredBy.map { "Answered on \($0): “\(answer)”" } ?? "You replied “\(answer)”", systemImage: "checkmark")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundStyle(Palette.primary)
+              .padding(.top, 14)
+          } else if message.wantsReply && message.closed {
+            Text("No longer waiting")
+              .font(.system(size: 12, weight: .medium))
+              .foregroundStyle(Palette.outline)
+              .padding(.top, 14)
+          }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+  }
+}
+
+// "All" plus one chip per topic, like the phone. Hidden when no message has
+// a topic; picking one filters the inbox.
+struct TopicChips: View {
+  @EnvironmentObject var model: AppModel
+
+  var body: some View {
+    let topics = model.topics
+    if !topics.isEmpty {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          chip("All", count: model.messages.count, selected: model.topic == nil) { model.topic = nil }
+          ForEach(topics, id: \.name) { topic in
+            chip(topic.name, count: topic.count, selected: model.topic == topic.name) {
+              model.topic = model.topic == topic.name ? nil : topic.name
+            }
+          }
+        }
+      }
+      .padding(.top, 2)
+    }
+  }
+
+  private func chip(_ label: String, count: Int, selected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack(spacing: 6) {
+        if selected {
+          Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+        }
+        Text(label).lineLimit(1).frame(maxWidth: 140)
+        Text("\(count)").monospacedDigit().foregroundStyle(Palette.onSurfaceVariant)
+      }
+      .font(.system(size: 12, weight: .medium))
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .background(Capsule().fill(selected ? Palette.primaryContainer : Palette.surfaceContainer))
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+// A small topic tag for message rows.
+struct TopicTag: View {
+  let topic: String
+
+  var body: some View {
+    Text(topic)
+      .font(.system(size: 10, weight: .medium))
+      .foregroundStyle(Palette.onSurfaceVariant)
+      .lineLimit(1)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 1)
+      .background(Capsule().fill(Palette.surfaceContainer))
+  }
+}
+
+extension View {
+  // A keyboard shortcut, or none.
+  @ViewBuilder
+  func shortcut(_ key: KeyEquivalent?, modifiers: EventModifiers = .command) -> some View {
+    if let key {
+      keyboardShortcut(key, modifiers: modifiers)
+    } else {
+      self
+    }
+  }
 }

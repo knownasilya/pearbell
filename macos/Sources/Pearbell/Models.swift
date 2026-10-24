@@ -74,13 +74,8 @@ enum Inbox {
   }
 }
 
-// Message text is Markdown; the inbox shows the inline parts of it.
-func markdown(_ text: String) -> AttributedString {
-  let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-  return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-}
-
+// Message text is Markdown (see Markdown.swift).
 // Notifications show the text without the markup.
 func plainText(_ text: String) -> String {
-  String(markdown(text).characters)
+  Markdown.plain(text)
 }

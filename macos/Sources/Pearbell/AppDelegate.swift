@@ -22,7 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     popover.contentSize = NSSize(width: 380, height: 580)
     popover.contentViewController = NSHostingController(rootView: PopoverView().environmentObject(model))
 
-    model.onOpen = { [weak self] in self?.show() }
+    // Opened from a notification: wait for its banner to go, or the popover
+    // closes again as the click moves focus.
+    model.onOpen = { [weak self] in
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self?.show() }
+    }
     // objectWillChange fires before the change lands, so look a beat later.
     changes = model.objectWillChange
       .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
@@ -36,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
       popover.performClose(nil)
     } else if Date().timeIntervalSince(closedAt) > 0.3 {
       // A click on the icon while it was open already closed it.
+      model.focused = nil
       show()
     }
   }

@@ -6,7 +6,8 @@ import UserNotifications
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
   // (message id, the action's label or the typed reply)
   var onAnswer: (String, String) -> Void = { _, _ in }
-  var onOpen: () -> Void = {}
+  // A click on the notification itself: open that message.
+  var onOpen: (String) -> Void = { _ in }
 
   private let center = UNUserNotificationCenter.current()
   private var categories: [String: UNNotificationCategory] = [:]
@@ -80,7 +81,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 let labels = self.actions[id], i < labels.count {
         self.onAnswer(id, labels[i])
       } else if action == UNNotificationDefaultActionIdentifier {
-        self.onOpen()
+        self.onOpen(id)
       }
       completionHandler()
     }
