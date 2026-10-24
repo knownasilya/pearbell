@@ -2,7 +2,7 @@
 // (a Kody job, a CI webhook relay, Shortcuts). Listens on 127.0.0.1 only, and
 // every request needs the token from `pearbell http on`.
 //
-//   POST /send  { body, title?, actions?, device?, wait?, timeout? }
+//   POST /send  { body, title?, topic?, actions?, device?, wait?, timeout? }
 //     -> 200 { id, delivered, queued }       without wait
 //     -> 200 { id, reply, device }           with wait
 //     -> 504 { error: 'timeout' }            no reply (or no delivery) in time

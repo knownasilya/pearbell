@@ -71,10 +71,10 @@ object Notifier {
       .setContentTitle(msg.title.ifEmpty { msg.fromName })
       .setContentText(Markdown.plain(msg.body))
       .setStyle(Notification.BigTextStyle().bigText(Markdown.plain(msg.body)))
-      .setSubText(msg.fromName)
+      .setSubText(listOf(msg.topic, msg.fromName).filter { it.isNotEmpty() }.joinToString(" · "))
       .setWhen(msg.receivedAt)
       .setShowWhen(true)
-      .setContentIntent(openApp(context))
+      .setContentIntent(openMessage(context, msg.id))
       .setAutoCancel(!msg.wantsReply)
       .setCategory(Notification.CATEGORY_MESSAGE)
 
@@ -143,6 +143,15 @@ object Notifier {
 
   private fun replyIntent(context: Context, id: String) =
     Intent(context, ReplyReceiver::class.java).putExtra(ReplyReceiver.EXTRA_ID, id)
+
+  // Opens the app on this message, in full.
+  private fun openMessage(context: Context, id: String) = PendingIntent.getActivity(
+    context, requestCode(id, 3),
+    Intent(context, MainActivity::class.java)
+      .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      .putExtra(MainActivity.EXTRA_OPEN, id),
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+  )
 
   private fun openApp(context: Context) = PendingIntent.getActivity(
     context, 0,

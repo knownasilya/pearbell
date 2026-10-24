@@ -122,6 +122,7 @@ export function sanitize (m = {}) {
   return {
     title: String(m.title || ''),
     body: String(m.body || ''),
+    topic: String(m.topic || '').trim().slice(0, 40),
     actions: Array.isArray(m.actions) ? m.actions.map(String).slice(0, 3) : [],
     wantsReply: m.wantsReply === true
   }

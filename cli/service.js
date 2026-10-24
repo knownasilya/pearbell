@@ -17,8 +17,23 @@ export function plistPath () {
   return path.join(os.homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`)
 }
 
+// Installed for this pearbell home? A PEARBELL_HOME used for tests or a
+// second identity gets its own daemon from the CLI, not the agent's.
 export function installed () {
-  return supported() && fs.existsSync(plistPath())
+  if (!supported()) return false
+  let xml
+  try {
+    xml = fs.readFileSync(plistPath(), 'utf8')
+  } catch {
+    return false
+  }
+  const home = /<key>PEARBELL_HOME<\/key>\s*<string>([^<]*)<\/string>/.exec(xml)?.[1]
+  const defaultHome = path.join(os.homedir(), '.config', 'pearbell')
+  return path.resolve(unescape(home ?? defaultHome)) === path.resolve(config.home())
+}
+
+function unescape (s) {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
 }
 
 const target = () => `gui/${process.getuid()}/${LABEL}`
@@ -32,7 +47,7 @@ export function install (bin) {
 }
 
 export function uninstall () {
-  if (!supported()) return
+  if (!installed()) return
   launchctl(['bootout', target()], { quiet: true })
   fs.rmSync(plistPath(), { force: true })
 }
@@ -67,7 +82,7 @@ function plist ({ args, path: dir }) {
   const env = {
     PATH: [dir, '/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin'].join(':'),
     HOME: os.homedir(),
-    ...(process.env.PEARBELL_HOME ? { PEARBELL_HOME: process.env.PEARBELL_HOME } : {}),
+    PEARBELL_HOME: config.home(),
     ...(process.env.VOLTA_HOME ? { VOLTA_HOME: process.env.VOLTA_HOME } : {})
   }
   const x = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

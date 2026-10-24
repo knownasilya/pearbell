@@ -13,7 +13,7 @@
 //   phone -> computer  { type: 'name', name }    the phone was renamed
 //   computer -> phone  { type: 'hello', name }   its current name
 //   phone -> computer  { type: 'pending', ids }   questions it still shows as open
-//   computer -> phone  { type: 'msg', id, title, body, actions, wantsReply }
+//   computer -> phone  { type: 'msg', id, title, topic, body, actions, wantsReply }
 //   phone -> computer  { type: 'ack', id }
 //   phone -> computer  { type: 'reply', id, text }
 //   computer -> phone  { type: 'closed', id }   nobody waits for a reply any more

@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pearbell.Hub
 import dev.pearbell.Message
 import dev.pearbell.Peer
@@ -94,7 +95,11 @@ private fun Inbox(
   onComputers: () -> Unit,
   onArchive: () -> Unit,
 ) {
-  val messages = all.filterNot { it.archived }
+  val inbox = all.filterNot { it.archived }
+  val topics = topicsOf(inbox)
+  var picked by rememberSaveable { mutableStateOf<String?>(null) }
+  val topic = picked?.takeIf { t -> topics.any { it.first == t } }
+  val messages = if (topic == null) inbox else inbox.filter { it.topic == topic }
   val open = messages.filter { it.open }
   val rest = messages.filterNot { it.open }
   val context = LocalContext.current
@@ -102,6 +107,15 @@ private fun Inbox(
   val snackbar = remember { SnackbarHostState() }
   val actions = rememberMessageActions(snackbar)
   var details by rememberSaveable { mutableStateOf<String?>(null) }
+
+  // A tapped notification opens its message in full.
+  val opening by Hub.openMessage.collectAsStateWithLifecycle()
+  LaunchedEffect(opening) {
+    opening?.let { id ->
+      details = id
+      Hub.openMessage.value = null
+    }
+  }
 
   Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -122,6 +136,7 @@ private fun Inbox(
 
       UpdateBanner()
       BatteryBanner()
+      TopicChips(topics, inbox.size, topic) { picked = it }
 
       if (messages.isEmpty()) {
         EmptyInbox(peers)
@@ -255,7 +270,7 @@ private fun QuestionCard(msg: Message, onOpen: () -> Unit, modifier: Modifier = 
         Column(Modifier.weight(1f)) {
           Text(msg.title.ifEmpty { msg.fromName }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            "${msg.fromName} · ${shortTime(context, msg.receivedAt, LocalNow.current)}",
+            listOf(msg.topic, msg.fromName, shortTime(context, msg.receivedAt, LocalNow.current)).filter { it.isNotEmpty() }.joinToString(" · "),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

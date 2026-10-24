@@ -159,6 +159,7 @@ You can pair one phone with many computers, and one computer with many phones. `
 ```bash
 pearbell send "Build finished"                 # notification
 pearbell send -t "CI" -d pixel "Deploy done"   # title, one phone only
+pearbell send -T builds "Nightly build is green"   # grouped under "builds" in the app
 pearbell ask "Which branch name?"              # waits, prints the reply
 pearbell ask -a "Approve,Reject" "Run migration 0042?"
 git log -1 | pearbell send -t "New commit" -   # body from stdin
@@ -172,6 +173,7 @@ pearbell stop       # stop the background daemon
 | Option | Meaning |
 | --- | --- |
 | `-t, --title` | Notification title |
+| `-T, --topic` | Group the message under a topic in the app (up to 40 characters) |
 | `-a, --actions a,b,c` | Up to 3 quick-reply buttons (the notification shows 2 plus Reply) |
 | `-d, --device` | Only this phone (name or start of its key) |
 | `-w, --wait` | Wait for a reply (`send -w` is `ask`) |
@@ -180,6 +182,14 @@ pearbell stop       # stop the background daemon
 | `-q, --quiet` | No progress lines on stderr |
 
 Exit codes: `0` ok, `1` error, `2` timeout. When `send` times out before delivery, it still exits `0`: the message waits in the daemon's queue.
+
+### Topics
+
+Give messages a topic (`-T builds`, or `"topic": "builds"` in the HTTP API) to group them. The app then shows a row of topic chips above the inbox and the archive, with a count for each, so you can see one topic at a time. Each message shows its topic, and so does its notification.
+
+### Long messages
+
+A message can hold up to 16,000 characters. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
 
 ### Markdown
 
@@ -216,7 +226,7 @@ curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
 
 | Endpoint | Body | Answer |
 | --- | --- | --- |
-| `POST /send` | `body` (required), `title`, `actions` (array or `"a,b"`), `device`, `wait`, `timeout` (seconds) | `{ id, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
+| `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `device`, `wait`, `timeout` (seconds) | `{ id, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
 | `GET /devices` | | `[{ name, publicKey, connected }]` |
 
 Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).

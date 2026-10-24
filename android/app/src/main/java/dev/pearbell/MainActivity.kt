@@ -1,6 +1,7 @@
 package dev.pearbell
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,6 +36,20 @@ import dev.pearbell.ui.PairScreen
 import dev.pearbell.ui.PearbellTheme
 
 class MainActivity : ComponentActivity() {
+  companion object {
+    const val EXTRA_OPEN = "open"
+  }
+
+  // From a notification: show that message.
+  private fun handleOpen(intent: Intent?) {
+    intent?.getStringExtra(EXTRA_OPEN)?.let { Hub.openMessage.value = it }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    handleOpen(intent)
+  }
+
   override fun onResume() {
     super.onResume()
     Updater.check(this)
@@ -50,6 +66,7 @@ class MainActivity : ComponentActivity() {
     }
 
     BellService.start(this)
+    handleOpen(intent)
 
     setContent {
       PearbellTheme {
@@ -79,6 +96,11 @@ private fun App() {
   fun go(to: String) {
     if (pairing !is Pairing.Busy) Hub.pairing.value = Pairing.Idle
     screen = to
+  }
+
+  val opening by Hub.openMessage.collectAsStateWithLifecycle()
+  LaunchedEffect(opening) {
+    if (opening != null && screen != "inbox") go("inbox")
   }
 
   BackHandler(enabled = target == "computers" || target == "pair" || target == "archive") {

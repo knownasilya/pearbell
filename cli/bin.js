@@ -29,6 +29,7 @@ Usage:
 
 Options for send and ask:
   -t, --title <title>                Notification title
+  -T, --topic <topic>                Group messages under a topic in the app
   -a, --actions <a,b,c>              Up to 3 quick-reply buttons
   -d, --device <name|key>            Only this phone (default: all)
   -w, --wait                         Wait for a reply (same as ask)
@@ -45,6 +46,7 @@ const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     title: { type: 'string', short: 't' },
+    topic: { type: 'string', short: 'T' },
     actions: { type: 'string', short: 'a' },
     device: { type: 'string', short: 'd' },
     wait: { type: 'boolean', short: 'w' },
@@ -118,7 +120,7 @@ async function runSend (wantsReply) {
   if (!Number.isFinite(seconds) || seconds < 0) throw new Error('--timeout takes a number of seconds')
 
   const actions = opts.actions ? opts.actions.split(',').map((a) => a.trim()).filter(Boolean) : []
-  const message = { title: opts.title || '', body, actions, wantsReply }
+  const message = { title: opts.title || '', topic: opts.topic || '', body, actions, wantsReply }
 
   const sock = await control.connect()
   const delivered = new Set()

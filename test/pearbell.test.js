@@ -187,6 +187,18 @@ test('the computer picks up a renamed phone', async (t) => {
   t.pass('name sent on reconnect')
 })
 
+test('topics and long messages reach the phone whole', async (t) => {
+  const { daemon, events, device } = await setup(t)
+  const long = 'x'.repeat(15_000)
+
+  const entry = daemon.send({ message: { topic: 'github-daily', title: 'Daily', body: long, actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+
+  const msg = events.find((e) => e.type === 'message').message
+  t.is(msg.topic, 'github-daily')
+  t.is(msg.body.length, 15_000, 'no truncation under the 16000 limit')
+})
+
 test('unknown keys cannot connect', async (t) => {
   const { daemon, node } = await setup(t)
 

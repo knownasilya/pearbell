@@ -55,11 +55,12 @@ test('http: send delivers and lists devices', async (t) => {
   const got = []
   const { call } = await setup(t, (m) => got.push(m))
 
-  const res = await call('/send', { title: 'Daily', body: '**3** to do' })
+  const res = await call('/send', { title: 'Daily', topic: ' github-daily ', body: '**3** to do' })
   t.is(res.status, 200)
   t.alike(res.json.delivered, ['pixel'])
   t.is(got[0].title, 'Daily')
   t.is(got[0].body, '**3** to do')
+  t.is(got[0].topic, 'github-daily', 'topic trimmed')
 
   const devices = await call('/devices')
   t.is(devices.json[0].name, 'pixel')

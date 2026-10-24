@@ -14,6 +14,7 @@ data class Message(
   val from: String,
   val fromName: String,
   val title: String,
+  val topic: String,
   val body: String,
   val actions: List<String>,
   val wantsReply: Boolean,
@@ -41,6 +42,8 @@ object Hub {
   val messages = MutableStateFlow<List<Message>>(emptyList())
   val pairing = MutableStateFlow<Pairing>(Pairing.Idle)
   val lastError = MutableStateFlow<String?>(null)
+  // A message to show in full, set when a notification is tapped.
+  val openMessage = MutableStateFlow<String?>(null)
 
   private val main = Handler(Looper.getMainLooper())
   private val queue = ArrayDeque<JSONObject>()
@@ -117,6 +120,7 @@ object Hub {
       from = o.optString("from"),
       fromName = pretty(o.optString("fromName")),
       title = o.optString("title"),
+      topic = o.optString("topic"),
       body = o.optString("body"),
       actions = if (actions == null) emptyList() else (0 until actions.length()).map { actions.getString(it) },
       wantsReply = o.optBoolean("wantsReply"),

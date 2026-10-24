@@ -41,7 +41,11 @@ import dev.pearbell.R
 @Composable
 fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
   val context = LocalContext.current
-  val archived = all.filter { it.archived }
+  val inArchive = all.filter { it.archived }
+  val topics = topicsOf(inArchive)
+  var picked by rememberSaveable { mutableStateOf<String?>(null) }
+  val topic = picked?.takeIf { t -> topics.any { it.first == t } }
+  val archived = if (topic == null) inArchive else inArchive.filter { it.topic == topic }
   val days = archived.groupBy { dayLabel(context, it.receivedAt) }
   val snackbar = remember { SnackbarHostState() }
   val actions = rememberMessageActions(snackbar)
@@ -54,6 +58,7 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
         Spacer(Modifier.width(4.dp))
         Text("Archive", style = MaterialTheme.typography.headlineMedium)
       }
+      TopicChips(topics, inArchive.size, topic) { picked = it }
 
       if (archived.isEmpty()) {
         Column(
