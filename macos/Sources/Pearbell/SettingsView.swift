@@ -11,6 +11,7 @@ struct SettingsView: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 10) {
         IconButton(symbol: "chevron.left", label: "Back", action: close)
+          .keyboardShortcut(.cancelAction)
         Text("Settings")
           .font(.system(size: 22, weight: .semibold))
         Spacer()
