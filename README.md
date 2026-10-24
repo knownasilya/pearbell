@@ -136,11 +136,9 @@ Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir`
 
 ### CI and releases
 
-[.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and builds the APK on every push and pull request. To publish a release, push a tag:
+[.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and builds the APK on every push and pull request.
 
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
+Releases use [release-plan](https://github.com/release-plan/release-plan). Give each pull request one label: `breaking`, `enhancement`, `bug`, `documentation` or `internal`. After a merge to main, a "Prepare Release" pull request shows the next version and its changelog. Merge it to publish to npm, tag the release and build the APK for it. See [RELEASE.md](RELEASE.md).
 
 **Signing.** Android installs an update only if it is signed with the same key as the installed app, so releases are signed with one long-lived key from the repository secrets below. Never lose or replace it: apps signed with the old key could not update anymore. Without these secrets (in a fork, say), CI signs each build with a new throwaway key. To create a key:
 
