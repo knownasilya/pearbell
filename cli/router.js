@@ -11,14 +11,14 @@
 //   3. No phone paired: the Mac.
 //   4. The menu says "Always Mac" or "Always phone": that one.
 //   5. Mac asleep or screen locked: the phone.
-//   6. No input for idleAfter seconds (default 2 min): the phone.
+//   6. No input for idleAfter seconds (default 5 min): the phone.
 //   7. Otherwise you are at the Mac, so the Mac. A question there also goes
 //      to the phone if it is still open after escalateAfter seconds (default
 //      3 min), or as soon as you step away (the daemon watches presence).
 //
 // When the phone wins but none is online, the Mac shows it too, so the
 // message is waiting on whichever screen you see first.
-export const IDLE_AFTER = 120
+export const IDLE_AFTER = 300
 export const ESCALATE_AFTER = 180
 
 export function decide ({ wantsReply = false, route = 'auto', presence = null, phones = [], now = Date.now() }) {

@@ -48,7 +48,7 @@ final class AppModel: ObservableObject {
   init() {
     let defaults = UserDefaults.standard
     mode = Mode(rawValue: defaults.string(forKey: "mode") ?? "") ?? .auto
-    idleAfter = defaults.object(forKey: "idleAfter") as? Double ?? 120
+    idleAfter = defaults.object(forKey: "idleAfter") as? Double ?? 300
     escalateAfter = defaults.object(forKey: "escalateAfter") as? Double ?? 180
     messages = Inbox.load()
 

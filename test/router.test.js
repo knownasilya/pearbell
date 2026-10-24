@@ -26,8 +26,8 @@ test('router: idle, locked or asleep means the phone', (t) => {
 })
 
 test('router: idle time counts on between reports', (t) => {
-  const p = { idle: 100, at: now }
-  t.is(idleSeconds(p, now + 30_000), 130)
+  const p = { idle: 280, at: now }
+  t.is(idleSeconds(p, now + 30_000), 310)
   t.ok(awayReason(p, now + 30_000))
   t.absent(awayReason(p, now))
 })
