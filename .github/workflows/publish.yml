@@ -42,3 +42,7 @@ jobs:
         run: gh workflow run android.yml --ref "v$(node -p 'require("./package.json").version')"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the Mac release
+        run: gh workflow run macos.yml --ref "v$(node -p 'require("./package.json").version')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

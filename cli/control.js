@@ -1,5 +1,17 @@
 // The local socket between short-lived CLI commands and the daemon.
 // Newline-delimited JSON, one request per connection.
+//
+// The macOS menu bar app (macos/) keeps one connection open instead:
+//   app -> daemon  { type: 'mac', presence }   first frame
+//   app -> daemon  { type: 'presence', idle, locked, asleep, mode, idleAfter, escalateAfter }
+//   daemon -> app  { type: 'state', computer, devices }
+//   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, notify, route, sentAt }
+//   app -> daemon  { type: 'ack', id }  or  { type: 'reply', id, text }
+//   daemon -> app  { type: 'routed', id, to, reason }   a question moved on to the phone
+//   daemon -> app  { type: 'closed', id, answer?, device? }
+//   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open
+// notify says whether the app shows a notification; otherwise it only keeps
+// the message in its inbox, because the phone got it.
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -60,14 +72,23 @@ export async function serve (daemon) {
   return server
 }
 
+export const ROUTES = ['auto', 'mac', 'phone', 'all']
+
 function handle (daemon, sock, req) {
   const reply = (frame) => writeJSON(sock, frame)
   const name = (d) => d.name
 
-  if (req.type === 'status') {
+  // The menu bar app keeps its connection open (see macos/README.md).
+  if (sock.isMac) return daemon.onMacFrame(sock, req)
+
+  if (req.type === 'mac') {
+    sock.isMac = true
+    daemon.attachMac(sock, req.presence)
+  } else if (req.type === 'status') {
     reply({
       type: 'status',
       pid: process.pid,
+      mac: daemon.mac ? { presence: daemon.presence() } : null,
       devices: daemon.devices.map((d) => ({ ...d, connected: daemon.isConnected(d.publicKey) }))
     })
     sock.end()
@@ -89,22 +110,24 @@ function handle (daemon, sock, req) {
     )
   } else if (req.type === 'send') {
     const targets = config.findDevices({ devices: daemon.devices }, req.device)
-    if (!targets.length) {
-      reply({ type: 'error', error: req.device ? `No paired phone matches "${req.device}"` : 'No phone paired yet. Run: pearbell pair' })
+    const error = noTarget(daemon, targets, req.device)
+    if (error) {
+      reply({ type: 'error', error })
       sock.end()
       return
     }
 
     const message = sanitize(req.message)
-    const entry = daemon.send({ message, targets, ttl: message.wantsReply ? (req.timeout || SEND_TTL) : SEND_TTL })
+    const route = req.device ? 'phone' : ROUTES.includes(req.route) ? req.route : 'auto'
+    const entry = daemon.send({ message, targets, route, ttl: message.wantsReply ? (req.timeout || SEND_TTL) : SEND_TTL })
+    const where = () => {
+      const now = daemon.targetsOf(entry)
+      return { targets: now.map(name), connected: now.filter((d) => daemon.isTargetConnected(d.publicKey)).map(name) }
+    }
 
-    reply({
-      type: 'queued',
-      id: entry.id,
-      targets: targets.map(name),
-      connected: targets.filter((d) => daemon.isConnected(d.publicKey)).map(name)
-    })
+    reply({ type: 'queued', id: entry.id, route: entry.route.to, reason: entry.route.reason, ...where() })
 
+    entry.on('routed', (r) => reply({ type: 'routed', route: r.to, reason: r.reason, ...where() }))
     entry.on('delivered', (d) => reply({ type: 'delivered', device: d.name }))
     entry.on('reply', ({ text, device }) => {
       reply({ type: 'reply', text, device: device.name })
@@ -117,6 +140,13 @@ function handle (daemon, sock, req) {
     reply({ type: 'error', error: `Unknown request ${req.type}` })
     sock.end()
   }
+}
+
+// Why a send has nowhere to go, or null.
+export function noTarget (daemon, targets, device) {
+  if (device && !targets.length) return `No paired phone matches "${device}"`
+  if (!targets.length && !daemon.mac) return 'No phone paired yet, and the menu bar app is not running. Run: pearbell pair'
+  return null
 }
 
 export function sanitize (m = {}) {

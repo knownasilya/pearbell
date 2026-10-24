@@ -9,3 +9,5 @@ android/app/src/main/addons/
 android/app/src/main/assets/app.bundle
 *.apk
 .DS_Store
+macos/.build/
+macos/build/

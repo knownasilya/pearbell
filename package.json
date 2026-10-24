@@ -29,6 +29,8 @@
     "android:fetch-bare-kit": "scripts/fetch-bare-kit.sh",
     "android:build": "cd android && ./gradlew assembleRelease",
     "android:install": "cd android && ./gradlew installDebug",
+    "mac:build": "macos/scripts/build-app.sh",
+    "mac:run": "macos/scripts/build-app.sh && open macos/build/pearbell.app",
     "prepublishOnly": "npm test"
   },
   "license": "Apache-2.0",

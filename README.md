@@ -79,6 +79,16 @@ If nobody answers in time, `ask` exits with code `2` (the default timeout is 10 
 - **Pairing** uses a one-time code: the computer's public key plus a random token. After pairing, each side only accepts the other's key.
 - **Replies** come from the notification (quick buttons or a typed reply) or from the app. If the phone is offline when you answer, the reply goes out when it reconnects.
 
+## The Mac menu bar app
+
+On a Mac, the optional menu bar app shows messages as Mac notifications while you are at the Mac, and leaves them to the phone when you step away (screen locked, Mac asleep, or no input for 5 minutes). A question you leave unanswered on the Mac moves on to the phone, and an answer on either closes it on both. Click a notification to open the message; the inbox renders Markdown, filters by topic, and can snooze the Mac for an hour. See [macos/README.md](macos/README.md).
+
+```console
+$ pearbell send "Build finished"
+routed to the Mac: you are using it
+delivered to this Mac
+```
+
 ## Install the CLI
 
 You need Node 20 or later.
@@ -165,6 +175,7 @@ pearbell ask --json "Continue?"                # {"id":"…","reply":"…","devi
 
 pearbell devices    # paired phones, online or not
 pearbell unpair pixel
+pearbell start      # start the background daemon (any command does)
 pearbell stop       # stop the background daemon
 ```
 
@@ -174,6 +185,7 @@ pearbell stop       # stop the background daemon
 | `-T, --topic` | Group the message under a topic in the app (up to 40 characters) |
 | `-a, --actions a,b,c` | Up to 3 quick-reply buttons (the notification shows 2 plus Reply) |
 | `-d, --device` | Only this phone (name or start of its key) |
+| `--to` | `auto` (default), `mac`, `phone` or `all`. With the [menu bar app](#the-mac-menu-bar-app) running, `auto` uses the Mac while you are at it. |
 | `-w, --wait` | Wait for a reply (`send -w` is `ask`) |
 | `--timeout s` | `send`: wait this long for delivery (default 10). `ask`: wait this long for a reply (default 600). `0` waits forever. |
 | `--json` | Machine-readable output |
@@ -224,7 +236,7 @@ curl -s http://127.0.0.1:7457/send -H "authorization: Bearer $TOKEN" \
 
 | Endpoint | Body | Answer |
 | --- | --- | --- |
-| `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `device`, `wait`, `timeout` (seconds) | `{ id, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
+| `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `device`, `to`, `wait`, `timeout` (seconds) | `{ id, route, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
 | `GET /devices` | | `[{ name, publicKey, connected }]` |
 
 Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).
@@ -266,12 +278,13 @@ npm run fake-phone           # listen; type a reply and press Enter
 ### Layout
 
 - [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams.
-- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server and queue), [control.js](cli/control.js) (local socket, daemon auto-start).
+- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server and queue), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone).
+- [macos/](macos): the SwiftUI menu bar app. It talks to the daemon over the local socket.
 - [android/](android): Kotlin app. [app.js](android/app/src/main/js/app.js) is the Bare worklet entry, bundled with `bare-pack` and linked with `bare-link` during the Gradle build. [BellService.kt](android/app/src/main/java/dev/pearbell/BellService.kt) is a foreground service that keeps the worklet alive and talks to it over Bare Kit IPC.
 
 ## Limits
 
-- **Android only** for now. The phone core is plain Bare JavaScript, so an iOS app could reuse it. But iOS does not let apps keep a connection open in the background, so it would need a push service.
+- **Android only** on the phone side for now. The phone core is plain Bare JavaScript, so an iOS app could reuse it. But iOS does not let apps keep a connection open in the background, so it would need a push service.
 - **The computer must be on** with the daemon running. After a reboot, the daemon starts with your next `pearbell` command (or at login with `pearbell service install`), and the phone finds it within 30 seconds.
 - **Two strict NATs** (for example, both sides on carrier networks) can still fail to connect. A computer on a home or office network is fine.
 - **Battery.** The app holds one idle encrypted connection per computer. That costs little, but it is not free.

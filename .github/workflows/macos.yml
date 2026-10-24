@@ -1,0 +1,56 @@
+# Builds the macOS menu bar app (macos/) on every push and pull request.
+# For a release (a v* tag pushed by hand, or publish.yml dispatching this
+# workflow with the tag as its ref) it attaches pearbell-mac-vX.Y.Z.zip to
+# that tag's GitHub Release: uploaded to the release if it exists (its notes
+# stay as they are), else the release is created.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the app
+        run: macos/scripts/build-app.sh
+        env:
+          PEARBELL_VERSION: ${{ env.TAG }}
+
+      - name: Name the zip
+        run: |
+          name="pearbell-mac-${TAG:-build-$GITHUB_RUN_NUMBER}.zip"
+          cp macos/build/pearbell-mac.zip "$name"
+          echo "ZIP=$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pearbell-mac
+          path: ${{ env.ZIP }}
+
+      - name: Attach to the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            # The Android run may create it first when a tag is pushed by hand.
+            gh release create "$TAG" "$ZIP" --generate-notes || gh release upload "$TAG" "$ZIP" --clobber
+          fi
