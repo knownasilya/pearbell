@@ -20,7 +20,7 @@ import org.json.JSONObject
 // place only when the release is signed with the same key as this app.
 object Updater {
   private const val LATEST = "https://api.github.com/repos/knownasilya/pearbell/releases/latest"
-  private const val CHECK_EVERY = 6 * 60 * 60 * 1000L
+  private const val CHECK_EVERY = 60 * 60 * 1000L
   private const val PREFS = "updater"
   private const val TAG = "pearbell-update"
 

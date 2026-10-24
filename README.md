@@ -129,7 +129,7 @@ It needs Android 10 or later. Get the APK one of these ways:
 
 Open the APK on the phone and allow installs from that source. Or, with USB debugging on: `adb install pearbell-*.apk`.
 
-**Updates.** The app checks the GitHub releases every few hours and installs new versions itself. Android asks you to confirm the first update; on Android 12 and later, the ones after that can install without a prompt. Turn this off, or check by hand, on the Computers screen.
+**Updates.** The app checks the GitHub releases every hour and installs new versions itself. Android asks you to confirm the first update; on Android 12 and later, the ones after that can install without a prompt. Turn this off, or check by hand, on the Computers screen.
 
 > **Coming from v0.1.0?** It was signed with a throwaway key, so it can't update itself. Uninstall it once and install v0.2.0 or later by hand; updates work from then on. (You'll need to pair again.)
 
@@ -146,11 +146,9 @@ Building needs JDK 17 or later and the Android SDK (`ANDROID_HOME`, or `sdk.dir`
 
 ### CI and releases
 
-[.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and builds the APK on every push and pull request. To publish a release, push a tag:
+[.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and builds the APK on every push and pull request.
 
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
+Releases use [release-plan](https://github.com/release-plan/release-plan). Give each pull request one label: `breaking`, `enhancement`, `bug`, `documentation` or `internal`. After a merge to main, a "Prepare Release" pull request shows the next version and its changelog. Merge it to publish to npm, tag the release and build the APK for it. See [RELEASE.md](RELEASE.md).
 
 **Signing.** Android installs an update only if it is signed with the same key as the installed app, so releases are signed with one long-lived key from the repository secrets below. Never lose or replace it: apps signed with the old key could not update anymore. Without these secrets (in a fork, say), CI signs each build with a new throwaway key. To create a key:
 
@@ -201,7 +199,7 @@ Give messages a topic (`-T builds`, or `"topic": "builds"` in the HTTP API) to g
 
 ### Long messages
 
-A message can hold up to 16,000 characters. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
+A message can hold up to 16,000 characters. A longer one is cut with a "… (cut: N more characters)" note at the end, the CLI warns about it, and the HTTP API adds `"truncated": true` to its reply. The inbox shows the first three lines with a **Tap to read all** hint, and tapping a notification opens the whole message.
 
 ### Markdown
 

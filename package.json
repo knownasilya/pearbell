@@ -1,6 +1,6 @@
 {
   "name": "pearbell",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Peer-to-peer push messages between a CLI and your Android phone, built on the Pear stack. An ntfy.sh alternative for AI tools.",
   "keywords": [
     "pear",
@@ -46,7 +46,8 @@
     "bare-link": "^4.0.1",
     "bare-pack": "^3.0.2",
     "bare-path": "^3.1.2",
-    "brittle": "^4.5.0"
+    "brittle": "^4.5.0",
+    "release-plan": "^0.18.0"
   },
   "files": [
     "cli",
@@ -58,5 +59,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/knownasilya/pearbell.git"
+  },
+  "release-plan": {
+    "semverIncrementAs": {
+      "major": "minor"
+    }
   }
 }

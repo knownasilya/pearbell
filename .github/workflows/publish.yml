@@ -1,0 +1,48 @@
+# For every push to the primary branch with .release-plan.json modified,
+# runs release-plan, then starts the Android build for the new tag. A tag
+# pushed with GITHUB_TOKEN does not start other workflows on its own.
+
+name: Publish Stable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '.release-plan.json'
+
+concurrency:
+  group: publish-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: "NPM Publish"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - name: Publish to NPM
+        run: npx release-plan publish --provenance
+        env:
+          GITHUB_AUTH: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the Android release
+        run: gh workflow run android.yml --ref "v$(node -p 'require("./package.json").version')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the Mac release
+        run: gh workflow run macos.yml --ref "v$(node -p 'require("./package.json").version')"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

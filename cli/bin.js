@@ -8,6 +8,7 @@ import * as config from './config.js'
 import * as control from './control.js'
 import { Daemon } from './daemon.js'
 import { presenceText } from './router.js'
+import { MAX_BODY } from '../shared/protocol.js'
 import { serveHttp } from './http.js'
 import * as service from './service.js'
 
@@ -124,6 +125,7 @@ async function runPair () {
 async function runSend (wantsReply) {
   const body = await readBody()
   if (!body) throw new Error('Nothing to send')
+  if (body.length > MAX_BODY) log(`message is ${body.length} characters; the phone keeps the first ${MAX_BODY}`)
 
   const seconds = opts.timeout === undefined ? (wantsReply ? 600 : 10) : Number(opts.timeout)
   if (!Number.isFinite(seconds) || seconds < 0) throw new Error('--timeout takes a number of seconds')

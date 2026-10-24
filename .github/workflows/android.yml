@@ -92,9 +92,15 @@ jobs:
           name: pearbell-apk
           path: ${{ env.APK }}
 
+      # release-plan makes the release with its changelog notes, so only add
+      # the APK to it. A tag pushed by hand gets a new release.
       - name: Publish the release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ env.APK }}
-          generate_release_notes: true
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$APK" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$APK" --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

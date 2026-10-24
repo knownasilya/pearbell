@@ -20,6 +20,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { onJSON, writeJSON } from '../shared/lines.js'
+import { clipBody } from '../shared/protocol.js'
 import * as config from './config.js'
 import { SEND_TTL } from './daemon.js'
 import * as service from './service.js'
@@ -151,7 +152,7 @@ export function noTarget (daemon, targets, device) {
 export function sanitize (m = {}) {
   return {
     title: String(m.title || ''),
-    body: String(m.body || ''),
+    body: clipBody(String(m.body || '')),
     topic: String(m.topic || '').trim().slice(0, 40),
     actions: Array.isArray(m.actions) ? m.actions.map(String).slice(0, 3) : [],
     wantsReply: m.wantsReply === true
