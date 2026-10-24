@@ -1,0 +1,22 @@
+{
+  "solution": {
+    "pearbell": {
+      "impact": "patch",
+      "oldVersion": "0.7.0",
+      "newVersion": "0.7.1",
+      "tagName": "latest",
+      "constraints": [
+        {
+          "impact": "patch",
+          "reason": "Appears in changelog section :bug: Bug Fix"
+        },
+        {
+          "impact": "patch",
+          "reason": "Appears in changelog section :house: Internal"
+        }
+      ],
+      "pkgJSONPath": "./package.json"
+    }
+  },
+  "description": "## Release (2026-10-24)\n\n* pearbell 0.7.1 (patch)\n\n#### :bug: Bug Fix\n* `pearbell`\n  * [#1](https://github.com/knownasilya/pearbell/pull/1) Mark cut-off messages, check for app updates hourly ([@knownasilya](https://github.com/knownasilya))\n\n#### :house: Internal\n* `pearbell`\n  * [#3](https://github.com/knownasilya/pearbell/pull/3) Set up release-plan for releases ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
+}
