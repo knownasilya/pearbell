@@ -9,6 +9,14 @@ pearbell send -t "Claude Code" "Refactor done, 42 tests pass"
 pearbell ask -a "Yes,No" "Push the branch to origin?"   # prints: Yes
 ```
 
+Ways to use it:
+
+- **CLI:** `pearbell send` and `pearbell ask` from a terminal, a script or a hook. See [All commands](#all-commands).
+- **MCP:** `pearbell mcp` gives Claude Code and other AI tools `send`, `update`, `ask` and `devices` tools. See [MCP server](#mcp-server).
+- **HTTP:** a local web API (and the same MCP tools at `/mcp`) for tools that can only make web requests. See [HTTP API](#http-api).
+- **Desktop:** a Mac menu bar app shows messages while you're at the Mac and hands them to the phone when you step away. See [The Mac menu bar app](#the-mac-menu-bar-app).
+- **Android:** the phone app gets notifications, answers questions and keeps an inbox. See [Install the Android app](#install-the-android-app).
+
 <p align="center">
   <img src="docs/inbox-light.png" width="270" alt="The pearbell inbox in light mode: an open question with Ship it and Hold buttons, and earlier messages below">
   &nbsp;
