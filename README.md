@@ -323,23 +323,27 @@ Then add `http://127.0.0.1:7457/mcp` as an MCP server with the token as its bear
 To tell the agent when to use it, add to `CLAUDE.md` or `AGENTS.md`:
 
 ```md
-When you need a decision from me and I seem away, use the pearbell ask tool.
+When you need my input or a decision, ask with the pearbell ask tool instead
+of asking in the chat, with the project folder name as the topic. It shows on
+my Mac while I use it and on my phone when I step away.
 For long jobs, send a task list with pearbell send and an id, and tick
 the steps off with pearbell update.
 ```
 
+Prefer the ask tool over `pearbell ask` in a shell. By default, Claude Code stops a shell command after two minutes, and an ask can wait ten.
+
 ### Claude Code hooks
 
-Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:
+Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes. The project folder becomes the topic, and the Stop hook sends Claude's last reply in full. pearbell marks anything over 16,000 characters as cut, so there is no need to shorten it:
 
 ```json
 {
   "hooks": {
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "jq -r .message | pearbell send -q -t 'Claude Code' -" }] }
+      { "hooks": [{ "type": "command", "command": "jq -r .message | pearbell send -q -t 'Claude Code' -T \"$(basename \"$CLAUDE_PROJECT_DIR\" | cut -c1-40)\" -" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "pearbell send -q -t 'Claude Code' 'Finished, waiting for you'" }] }
+      { "hooks": [{ "type": "command", "command": "jq -r '.last_assistant_message // \"Finished, waiting for you\"' | pearbell send -q -t 'Claude Code · done' -T \"$(basename \"$CLAUDE_PROJECT_DIR\" | cut -c1-40)\" -" }] }
     ]
   }
 }
