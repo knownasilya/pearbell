@@ -9,6 +9,14 @@ pearbell send -t "Claude Code" "Refactor done, 42 tests pass"
 pearbell ask -a "Yes,No" "Push the branch to origin?"   # prints: Yes
 ```
 
+Ways to use it:
+
+- **CLI:** `pearbell send` and `pearbell ask` from a terminal, a script or a hook. See [All commands](#all-commands).
+- **MCP:** `pearbell mcp` gives Claude Code and other AI tools `send`, `update`, `ask` and `devices` tools. See [MCP server](#mcp-server).
+- **HTTP:** a local web API (and the same MCP tools at `/mcp`) for tools that can only make web requests. See [HTTP API](#http-api).
+- **Desktop:** a Mac menu bar app shows messages while you're at the Mac and hands them to the phone when you step away. See [The Mac menu bar app](#the-mac-menu-bar-app).
+- **Android:** the phone app gets notifications, answers questions and keeps an inbox. See [Install the Android app](#install-the-android-app).
+
 <p align="center">
   <img src="docs/inbox-light.png" width="270" alt="The pearbell inbox in light mode: an open question with Ship it and Hold buttons, and earlier messages below">
   &nbsp;
@@ -266,6 +274,7 @@ The `id` you give is your own; the `id` in the answer is the daemon's, and the a
 | `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `id`, `device`, `to`, `wait`, `timeout` (seconds) | `{ id, route, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
 | `POST /update` | `id` and `body` (required), `title`, `topic`, `device`, `to`, `timeout` | as `/send` without `wait` |
 | `GET /devices` | | `[{ name, publicKey, connected }]` |
+| `POST /mcp` | a JSON-RPC message (MCP) | its answer; see [MCP server](#mcp-server) |
 
 Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).
 
@@ -301,6 +310,14 @@ For other MCP clients (Claude Desktop, Cursor and so on), add a stdio server wit
 ```
 
 The client may not see the `PATH` from your shell. If it can't find `pearbell`, use the full path from `which pearbell`.
+
+**Over HTTP.** Some MCP clients, such as [Kody](https://github.com/kentcdodds/kody-celld), connect only over HTTP. With the [HTTP API](#http-api) on, the daemon serves the same tools at `/mcp` (Streamable HTTP, JSON answers), behind the same token:
+
+```bash
+pearbell http on    # prints the URL and the token
+```
+
+Then add `http://127.0.0.1:7457/mcp` as an MCP server with the token as its bearer token. In Kody: `kody.mcpServerAdd({ name: 'pearbell', url: 'http://127.0.0.1:7457/mcp', bearerToken: '<token>' })`. The client must run on the same computer, since the API only listens on `127.0.0.1`.
 
 To tell the agent when to use it, add to `CLAUDE.md` or `AGENTS.md`:
 

@@ -12,10 +12,13 @@
 //     changes the message sent with that id, without a new notification
 //     -> 200 { id, route, delivered, queued }  as /send
 //   GET /devices -> [{ name, publicKey, connected }]
+//   POST /mcp  the MCP tools of `pearbell mcp` (mcp.js), Streamable HTTP with
+//     JSON responses: one JSON-RPC message (or an array) in, its answer out
 import { timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import * as config from './config.js'
 import { ROUTES, badKey, noTarget, sanitize } from './control.js'
+import { answer } from './mcp.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import { SEND_TTL } from './daemon.js'
 
@@ -37,6 +40,8 @@ async function handle (daemon, token, req, res) {
   if (!authorized(req.headers.authorization, token)) return reply(res, 401, { error: 'unauthorized' })
 
   const url = new URL(req.url, 'http://127.0.0.1')
+
+  if (url.pathname === '/mcp') return mcp(req, res)
 
   if (req.method === 'GET' && url.pathname === '/devices') {
     return reply(res, 200, daemon.devices.map((d) => ({ name: d.name, publicKey: d.publicKey, connected: daemon.isConnected(d.publicKey) })))
@@ -108,6 +113,36 @@ async function handle (daemon, token, req, res) {
       if (!done) { done = true; clearTimeout(timer); resolve() }
     })
   })
+}
+
+// No server-sent events: every answer is a plain JSON response, and a GET for
+// a stream is refused, as the spec allows.
+async function mcp (req, res) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { allow: 'POST' })
+    return res.end()
+  }
+
+  let input
+  try {
+    input = JSON.parse(await readBody(req))
+  } catch (err) {
+    return reply(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: err.message === 'too large' ? 'body too large' : 'parse error' } })
+  }
+
+  // A client that hangs up stops waiting: an open question closes.
+  const gone = new AbortController()
+  res.once('close', () => { if (!res.writableFinished) gone.abort() })
+
+  // The tools reach the daemon over its own local socket, which is up by now.
+  const messages = Array.isArray(input) ? input : [input]
+  const answers = (await Promise.all(messages.map((m) => answer(m, { start: false, signal: gone.signal })))).filter(Boolean)
+
+  if (!answers.length) {
+    res.writeHead(202)
+    return res.end()
+  }
+  reply(res, 200, Array.isArray(input) ? answers : answers[0])
 }
 
 function authorized (header, token) {
