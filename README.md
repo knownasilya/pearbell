@@ -177,6 +177,7 @@ pearbell devices    # paired phones, online or not
 pearbell unpair pixel
 pearbell start      # start the background daemon (any command does)
 pearbell stop       # stop the background daemon
+pearbell mcp        # MCP server for AI tools, see "Use it with AI tools"
 ```
 
 | Option | Meaning |
@@ -270,7 +271,48 @@ Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a pho
 
 ## Use it with AI tools
 
-**Claude Code hooks.** Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:
+### MCP server
+
+`pearbell mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server. It gives an agent typed tools, so it doesn't need to know the CLI flags or quote Markdown in a shell string. Add it to Claude Code once, for all your projects:
+
+```bash
+claude mcp add --scope user pearbell -- pearbell mcp
+```
+
+Then run `/mcp` in Claude Code to check that it is connected. The server starts the daemon if it isn't running, like any `pearbell` command. Its tools:
+
+| Tool | Arguments | What it does |
+| --- | --- | --- |
+| `send` | `body`, and optionally `title`, `topic`, `id`, `device`, `to` | Sends a notification. Returns once it is delivered, or queued for a phone that is offline. |
+| `update` | `id`, `body`, and optionally `title`, `topic`, `device`, `to` | Changes the message sent with that `id`, without a new notification. Good for ticking off a task list. |
+| `ask` | `body`, and optionally `actions` (up to 3), `timeout` (seconds, default 600, `0` waits forever), `title`, `topic`, `id`, `device`, `to` | Asks a question and waits for the answer. If the agent stops waiting (you press Esc, say), the question closes on the phone. |
+| `devices` | | Lists the paired phones, whether each is online, and whether the menu bar app is running. |
+
+The arguments mean the same as the [command options](#all-commands). Results are JSON, such as `{"id":"…","reply":"Ship it","device":"Pixel 8"}` from `ask`. A failure (no paired phone, no answer in time) comes back as a tool error the agent can read.
+
+For other MCP clients (Claude Desktop, Cursor and so on), add a stdio server with the command `pearbell` and the argument `mcp`:
+
+```json
+{
+  "mcpServers": {
+    "pearbell": { "command": "pearbell", "args": ["mcp"] }
+  }
+}
+```
+
+The client may not see the `PATH` from your shell. If it can't find `pearbell`, use the full path from `which pearbell`.
+
+To tell the agent when to use it, add to `CLAUDE.md` or `AGENTS.md`:
+
+```md
+When you need a decision from me and I seem away, use the pearbell ask tool.
+For long jobs, send a task list with pearbell send and an id, and tick
+the steps off with pearbell update.
+```
+
+### Claude Code hooks
+
+Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes:
 
 ```json
 {
@@ -285,7 +327,9 @@ Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a pho
 }
 ```
 
-**Let the agent ask you.** Add to `CLAUDE.md` or `AGENTS.md`:
+### Without MCP
+
+An agent that can run shell commands can use the CLI. Add to `CLAUDE.md` or `AGENTS.md`:
 
 ```md
 When you need a decision from me and I seem away, run
@@ -305,7 +349,7 @@ npm run fake-phone           # listen; type a reply and press Enter
 ### Layout
 
 - [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams.
-- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server and queue), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone).
+- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server and queue), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone), [mcp.js](cli/mcp.js) (MCP server), [http.js](cli/http.js) (HTTP API).
 - [macos/](macos): the SwiftUI menu bar app. It talks to the daemon over the local socket.
 - [android/](android): Kotlin app. [app.js](android/app/src/main/js/app.js) is the Bare worklet entry, bundled with `bare-pack` and linked with `bare-link` during the Gradle build. [BellService.kt](android/app/src/main/java/dev/pearbell/BellService.kt) is a foreground service that keeps the worklet alive and talks to it over Bare Kit IPC.
 

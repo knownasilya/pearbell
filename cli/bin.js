@@ -10,6 +10,7 @@ import { Daemon } from './daemon.js'
 import { presenceText } from './router.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import { serveHttp } from './http.js'
+import { serveMcp } from './mcp.js'
 import * as service from './service.js'
 
 const HELP = `pearbell - peer-to-peer messages to your phone
@@ -28,6 +29,8 @@ Usage:
   pearbell start                     Start the background daemon if it is
                                      not running (the menu bar app uses it)
   pearbell stop                      Stop the background daemon
+  pearbell mcp                       MCP server on stdin/stdout for AI tools
+                                     (send, update, ask and devices tools)
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
   pearbell service [install|uninstall|status]
@@ -105,6 +108,7 @@ async function run () {
     case 'daemon': return runDaemon()
     case 'start': return runStart()
     case 'stop': return runStop()
+    case 'mcp': return runMcp()
     case 'http': return runHttp()
     case 'service': return runService()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
@@ -149,20 +153,8 @@ async function runSend (wantsReply, update = false) {
   const actions = opts.actions ? opts.actions.split(',').map((a) => a.trim()).filter(Boolean) : []
   const message = { title: opts.title || '', topic: opts.topic || '', body, actions, wantsReply, key, update }
 
-  const sock = await control.connect()
-  const delivered = new Set()
-  let queued = null
-  let reply = null
-  let error = null
-  let timedOut = false
-
-  const timer = seconds > 0
-    ? setTimeout(() => { timedOut = true; sock.end() }, seconds * 1000)
-    : null
-
-  await control.request(sock, { type: 'send', message, device: opts.device, route: opts.to, timeout: seconds * 1000 || undefined }, (frame) => {
+  const onframe = (frame, delivered) => {
     if (frame.type === 'queued' || frame.type === 'routed') {
-      queued = { ...queued, ...frame }
       if (frame.type === 'queued' && key && frame.key !== key) log('the running daemon is older and ignores message ids; restart it with: pearbell stop')
       if (frame.type === 'routed' || frame.reason !== 'the menu bar app is not running') {
         log(frame.type === 'routed' ? `also sent to the phone: ${frame.reason}` : `routed to ${where(frame.route)}: ${frame.reason}`)
@@ -170,16 +162,11 @@ async function runSend (wantsReply, update = false) {
       const offline = frame.targets.filter((n) => !frame.connected.includes(n) && !delivered.has(n))
       if (offline.length) log(`waiting for ${offline.join(', ')} to connect`)
     } else if (frame.type === 'delivered') {
-      delivered.add(frame.device)
       log(`delivered to ${frame.device}`)
-      if (!wantsReply && delivered.size === queued.targets.length) sock.end()
-    } else if (frame.type === 'reply') {
-      reply = frame
-    } else if (frame.type === 'error') {
-      error = frame
     }
-  })
-  clearTimeout(timer)
+  }
+
+  const { queued, delivered, missing, reply, error, timedOut } = await control.send({ message, device: opts.device, route: opts.to, seconds, onframe })
 
   if (error) throw daemonError(error)
 
@@ -192,9 +179,8 @@ async function runSend (wantsReply, update = false) {
     return 0
   }
 
-  const missing = queued.targets.filter((n) => !delivered.has(n))
   if (missing.length) log(`${missing.join(', ')} offline; the message waits in the queue`)
-  if (opts.json) console.log(JSON.stringify({ id: queued.id, ...(key ? { key } : {}), route: queued.route, delivered: [...delivered], queued: missing }))
+  if (opts.json) console.log(JSON.stringify({ id: queued.id, ...(key ? { key } : {}), route: queued.route, delivered, queued: missing }))
   return 0
 }
 
@@ -263,6 +249,11 @@ async function runStop () {
   } catch {
     console.log('Daemon is not running')
   }
+  return 0
+}
+
+async function runMcp () {
+  await serveMcp()
   return 0
 }
 

@@ -210,6 +210,45 @@ export function request (sock, req, onframe) {
   })
 }
 
+// Send a message through the daemon (starting it if needed) and wait until
+// every phone has it, or with message.wantsReply until somebody answers.
+// seconds limits the wait (0 = no limit); aborting signal stops waiting, which
+// closes an open question. onframe sees each frame from the daemon.
+// Resolves { queued, delivered, missing, reply, error, timedOut }.
+export async function send ({ message, device, route, seconds = 0, signal, onframe = noop }) {
+  const sock = await connect()
+  const delivered = new Set()
+  let queued = null
+  let reply = null
+  let error = null
+  let timedOut = false
+
+  const timer = seconds > 0
+    ? setTimeout(() => { timedOut = true; sock.end() }, seconds * 1000)
+    : null
+  const abort = () => sock.end()
+  signal?.addEventListener('abort', abort)
+
+  await request(sock, { type: 'send', message, device, route, timeout: seconds * 1000 || undefined }, (frame) => {
+    if (frame.type === 'queued' || frame.type === 'routed') {
+      queued = { ...queued, ...frame }
+    } else if (frame.type === 'delivered') {
+      delivered.add(frame.device)
+    } else if (frame.type === 'reply') {
+      reply = frame
+    } else if (frame.type === 'error') {
+      error = frame
+    }
+    onframe(frame, delivered)
+    if (frame.type === 'delivered' && !message.wantsReply && delivered.size === queued.targets.length) sock.end()
+  })
+  clearTimeout(timer)
+  signal?.removeEventListener('abort', abort)
+
+  const missing = queued ? queued.targets.filter((n) => !delivered.has(n)) : []
+  return { queued, delivered: [...delivered], missing, reply, error, timedOut }
+}
+
 function dial (file) {
   return new Promise((resolve, reject) => {
     const sock = net.connect(file)
