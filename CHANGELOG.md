@@ -2,6 +2,17 @@
 
 ## Release (2026-10-26)
 
+* pearbell 0.12.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#15](https://github.com/knownasilya/pearbell/pull/15) Run the daemon as a systemd user service on Linux ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
+## Release (2026-10-26)
+
 * pearbell 0.11.0 (minor)
 
 #### :rocket: Enhancement
