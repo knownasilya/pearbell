@@ -2,8 +2,8 @@
   "solution": {
     "pearbell": {
       "impact": "minor",
-      "oldVersion": "0.9.1",
-      "newVersion": "0.10.0",
+      "oldVersion": "0.10.0",
+      "newVersion": "0.11.0",
       "tagName": "latest",
       "constraints": [
         {
@@ -14,5 +14,5 @@
       "pkgJSONPath": "./package.json"
     }
   },
-  "description": "## Release (2026-10-26)\n\n* pearbell 0.10.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#11](https://github.com/knownasilya/pearbell/pull/11) Add pearbell mcp, an MCP server for AI tools ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
+  "description": "## Release (2026-10-26)\n\n* pearbell 0.11.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#13](https://github.com/knownasilya/pearbell/pull/13) Serve the MCP tools over HTTP at /mcp, for Kody ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
 }

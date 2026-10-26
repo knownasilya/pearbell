@@ -2,6 +2,17 @@
 
 ## Release (2026-10-26)
 
+* pearbell 0.11.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#13](https://github.com/knownasilya/pearbell/pull/13) Serve the MCP tools over HTTP at /mcp, for Kody ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
+## Release (2026-10-26)
+
 * pearbell 0.10.0 (minor)
 
 #### :rocket: Enhancement
