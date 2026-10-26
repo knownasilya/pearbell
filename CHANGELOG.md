@@ -2,6 +2,17 @@
 
 ## Release (2026-10-26)
 
+* pearbell 0.10.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#11](https://github.com/knownasilya/pearbell/pull/11) Add pearbell mcp, an MCP server for AI tools ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
+## Release (2026-10-26)
+
 * pearbell 0.9.1 (patch)
 
 #### :bug: Bug Fix
