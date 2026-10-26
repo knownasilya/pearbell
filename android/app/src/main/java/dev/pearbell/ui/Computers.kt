@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.pearbell.Battery
 import dev.pearbell.Hub
 import dev.pearbell.Peer
 import dev.pearbell.PhoneName
@@ -126,6 +128,7 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
           )
           Spacer(Modifier.height(12.dp))
           UpdateSettings()
+          ReachableSetting()
           TextButton(onClick = { clearing = true }) {
             Text("Clear message history", color = MaterialTheme.colorScheme.error)
           }
@@ -152,6 +155,30 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
       confirmButton = { TextButton(onClick = { Hub.clear(); clearing = false }) { Text("Clear") } },
       dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } }
     )
+  }
+}
+
+// Brings back the inbox's "Stay reachable" banner after it was closed. Only
+// shown while Android still limits pearbell in the background.
+@Composable
+private fun ReachableSetting() {
+  val context = LocalContext.current
+  if (Battery.exempt(context)) return
+  var shown by remember { mutableStateOf(!Battery.bannerHidden(context)) }
+
+  Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.weight(1f)) {
+      Text("Show \"Stay reachable\" reminder", style = MaterialTheme.typography.bodyMedium)
+      Text(
+        "Background use is still limited, so messages can wait until the screen turns on.",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+    Switch(checked = shown, onCheckedChange = {
+      shown = it
+      Battery.setBannerHidden(context, !it)
+    })
   }
 }
 
