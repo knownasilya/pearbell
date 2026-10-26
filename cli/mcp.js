@@ -9,6 +9,8 @@
 //   devices  {}
 //
 // Newline-delimited JSON-RPC 2.0. stdout carries protocol frames only.
+// The HTTP API (http.js) serves the same tools at POST /mcp, for MCP clients
+// that only speak Streamable HTTP.
 import fs from 'node:fs'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { MAX_BODY } from '../shared/protocol.js'
@@ -83,18 +85,35 @@ export function serveMcp ({ input = process.stdin, output = process.stdout } = {
   const write = (frame) => writeJSON(output, { jsonrpc: '2.0', ...frame })
 
   onJSON(input, async (req) => {
-    if (req.method === 'notifications/cancelled') {
-      calls.get(req.params?.requestId)?.abort()
-      return
-    }
-    if (req.id === undefined || req.id === null) return // other notifications
-
-    try {
-      write({ id: req.id, result: await handle(req) })
-    } catch (err) {
-      write({ id: req.id, error: { code: err.rpcCode || -32603, message: err.message } })
-    }
+    const res = await answer(req, { calls, write })
+    if (res) write(res)
   })
+
+  // Resolves when the client hangs up. Open questions close with the process.
+  return new Promise((resolve) => {
+    input.once('end', () => {
+      for (const abort of calls.values()) abort.abort()
+      resolve()
+    })
+  })
+}
+
+// Answer one JSON-RPC message: the response frame, or null for a notification.
+// calls maps request ids to AbortControllers, so a cancel can stop a call.
+// write sends progress notifications (stdio only). start: false never starts
+// the daemon (the HTTP API runs inside it).
+export async function answer (req, { calls = new Map(), write, start = true, signal } = {}) {
+  if (req?.method === 'notifications/cancelled') {
+    calls.get(req.params?.requestId)?.abort()
+    return null
+  }
+  if (req?.id === undefined || req.id === null) return null // other notifications
+
+  try {
+    return { jsonrpc: '2.0', id: req.id, result: await handle(req) }
+  } catch (err) {
+    return { jsonrpc: '2.0', id: req.id, error: { code: err.rpcCode || -32603, message: err.message } }
+  }
 
   async function handle (req) {
     switch (req.method) {
@@ -112,13 +131,14 @@ export function serveMcp ({ input = process.stdin, output = process.stdout } = {
       case 'tools/call': {
         const abort = new AbortController()
         calls.set(req.id, abort)
+        signal?.addEventListener('abort', () => abort.abort())
         const progress = req.params?._meta?.progressToken
         let step = 0
-        const notify = progress === undefined
+        const notify = progress === undefined || !write
           ? () => {}
           : (message) => write({ method: 'notifications/progress', params: { progressToken: progress, progress: ++step, message } })
         try {
-          return await callTool(req.params?.name, req.params?.arguments || {}, { signal: abort.signal, notify })
+          return await callTool(req.params?.name, req.params?.arguments || {}, { signal: abort.signal, notify, start })
         } catch (err) {
           // Tool failures go back to the model as results it can read.
           return { content: [{ type: 'text', text: err.message }], isError: true }
@@ -130,18 +150,10 @@ export function serveMcp ({ input = process.stdin, output = process.stdout } = {
         throw Object.assign(new Error(`Unknown method ${req.method}`), { rpcCode: -32601 })
     }
   }
-
-  // Resolves when the client hangs up. Open questions close with the process.
-  return new Promise((resolve) => {
-    input.once('end', () => {
-      for (const abort of calls.values()) abort.abort()
-      resolve()
-    })
-  })
 }
 
-export async function callTool (name, args, { signal, notify = () => {} } = {}) {
-  if (name === 'devices') return devices()
+export async function callTool (name, args, { signal, notify = () => {}, start = true } = {}) {
+  if (name === 'devices') return devices(start)
   if (!['send', 'update', 'ask'].includes(name)) throw new Error(`Unknown tool ${name}`)
 
   const update = name === 'update'
@@ -164,7 +176,7 @@ export async function callTool (name, args, { signal, notify = () => {} } = {}) 
     if (frame.type === 'delivered') notify(`delivered to ${frame.device}`)
     else if (frame.type === 'routed') notify(`sent to the phone too: ${frame.reason}`)
   }
-  const result = await control.send({ message, device: args.device, route: args.to, seconds, signal, onframe })
+  const result = await control.send({ message, device: args.device, route: args.to, seconds, signal, onframe, start })
   const { queued, reply, error } = result
 
   if (error) throw new Error(error.error)
@@ -182,8 +194,8 @@ export async function callTool (name, args, { signal, notify = () => {} } = {}) 
   return json({ ...out, route: queued.route, delivered: result.delivered, queued: result.missing })
 }
 
-async function devices () {
-  const sock = await control.connect()
+async function devices (start) {
+  const sock = await control.connect({ start })
   let status = null
   await control.request(sock, { type: 'status' }, (frame) => { status = frame })
   if (!status) throw new Error('The daemon closed the connection')

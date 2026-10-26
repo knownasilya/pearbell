@@ -5,12 +5,13 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { onJSON, writeJSON } from '../shared/lines.js'
+import { serveHttp } from '../cli/http.js'
 
 const BIN = new URL('../cli/bin.js', import.meta.url).pathname
 
-// `pearbell mcp` in a child process, talking to a stand-in daemon on the
-// control socket. ondaemon(req, reply, sock) answers each daemon request.
-async function setup (t, ondaemon) {
+// A stand-in daemon on the control socket in a fresh PEARBELL_HOME.
+// ondaemon(req, reply, sock) answers each daemon request.
+async function fakeDaemon (t, ondaemon) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pearbell-mcp-'))
   t.teardown(() => fs.rmSync(home, { recursive: true, force: true }))
 
@@ -24,6 +25,12 @@ async function setup (t, ondaemon) {
   })
   await new Promise((resolve) => server.listen(path.join(home, 'daemon.sock'), resolve))
   t.teardown(() => server.close())
+  return { home, requests }
+}
+
+// `pearbell mcp` in a child process, talking to a stand-in daemon.
+async function setup (t, ondaemon) {
+  const { home, requests } = await fakeDaemon(t, ondaemon)
 
   const child = spawn(process.execPath, [BIN, 'mcp'], { env: { ...process.env, PEARBELL_HOME: home }, stdio: ['pipe', 'pipe', 'inherit'] })
   t.teardown(() => child.kill())
@@ -168,4 +175,80 @@ test('mcp: exits when the client hangs up', async (t) => {
   const exited = new Promise((resolve) => child.once('exit', resolve))
   child.stdin.end()
   t.is(await exited, 0)
+})
+
+// POST /mcp on the HTTP API, in this process, with the stand-in daemon.
+async function setupHttp (t, ondaemon) {
+  const { home, requests } = await fakeDaemon(t, ondaemon)
+  const before = process.env.PEARBELL_HOME
+  process.env.PEARBELL_HOME = home
+  t.teardown(() => { if (before === undefined) delete process.env.PEARBELL_HOME; else process.env.PEARBELL_HOME = before })
+
+  const server = await serveHttp({ devices: [] }, { port: 0, token: 'tok' })
+  t.teardown(() => { server.close(); server.closeAllConnections() })
+  const url = `http://127.0.0.1:${server.address().port}/mcp`
+
+  const post = async (body, token = 'tok') => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify(body)
+    })
+    const text = await res.text()
+    return { status: res.status, type: res.headers.get('content-type'), json: text ? JSON.parse(text) : null }
+  }
+  return { post, url, requests }
+}
+
+test('mcp over http: initialize, list and call tools', async (t) => {
+  const { post, requests } = await setupHttp(t, deliver)
+
+  const init = await post({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'kody', version: '1' } } })
+  t.is(init.status, 200)
+  t.is(init.type, 'application/json')
+  t.is(init.json.result.protocolVersion, '2025-03-26')
+
+  const note = await post({ jsonrpc: '2.0', method: 'notifications/initialized' })
+  t.is(note.status, 202)
+
+  const list = await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' })
+  t.is(list.json.result.tools.length, 4)
+
+  const sent = await post({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'send', arguments: { body: 'hi', id: 'k1' } } })
+  t.is(sent.json.id, 3)
+  t.alike(sent.json.result.structuredContent.delivered, ['pixel'])
+  t.is(requests[0].message.key, 'k1')
+})
+
+test('mcp over http: token, method and bad JSON', async (t) => {
+  const { post, url } = await setupHttp(t, deliver)
+  t.is((await post({ jsonrpc: '2.0', id: 1, method: 'ping' }, 'nope')).status, 401)
+  t.is((await fetch(url, { headers: { authorization: 'Bearer tok' } })).status, 405)
+
+  const bad = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer tok' }, body: '{nope' })
+  t.is(bad.status, 400)
+  t.is((await bad.json()).error.code, -32700)
+})
+
+test('mcp over http: a client that hangs up closes the question', async (t) => {
+  let closed = null
+  const hungUp = new Promise((resolve) => { closed = resolve })
+  const { url } = await setupHttp(t, (req, reply, sock) => {
+    deliver(req, reply)
+    sock.once('end', closed)
+  })
+
+  const stop = new AbortController()
+  const asking = fetch(url, {
+    method: 'POST',
+    signal: stop.signal,
+    headers: { authorization: 'Bearer tok', 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ask', arguments: { body: 'Wait?' } } })
+  }).catch(() => null)
+
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  stop.abort()
+  await asking
+  await hungUp
+  t.pass('the daemon saw the question go')
 })

@@ -266,6 +266,7 @@ The `id` you give is your own; the `id` in the answer is the daemon's, and the a
 | `POST /send` | `body` (required), `title`, `topic`, `actions` (array or `"a,b"`), `id`, `device`, `to`, `wait`, `timeout` (seconds) | `{ id, route, delivered, queued }`, or with `wait`: `{ id, reply, device }` |
 | `POST /update` | `id` and `body` (required), `title`, `topic`, `device`, `to`, `timeout` | as `/send` without `wait` |
 | `GET /devices` | | `[{ name, publicKey, connected }]` |
+| `POST /mcp` | a JSON-RPC message (MCP) | its answer; see [MCP server](#mcp-server) |
 
 Without `wait`, `timeout` is how long to wait for delivery (default 10 s); a phone that is offline gets the message later. With `wait`, it is how long to wait for a reply (default 600 s).
 
@@ -301,6 +302,14 @@ For other MCP clients (Claude Desktop, Cursor and so on), add a stdio server wit
 ```
 
 The client may not see the `PATH` from your shell. If it can't find `pearbell`, use the full path from `which pearbell`.
+
+**Over HTTP.** Some MCP clients, such as [Kody](https://github.com/kentcdodds/kody-celld), connect only over HTTP. With the [HTTP API](#http-api) on, the daemon serves the same tools at `/mcp` (Streamable HTTP, JSON answers), behind the same token:
+
+```bash
+pearbell http on    # prints the URL and the token
+```
+
+Then add `http://127.0.0.1:7457/mcp` as an MCP server with the token as its bearer token. In Kody: `kody.mcpServerAdd({ name: 'pearbell', url: 'http://127.0.0.1:7457/mcp', bearerToken: '<token>' })`. The client must run on the same computer, since the API only listens on `127.0.0.1`.
 
 To tell the agent when to use it, add to `CLAUDE.md` or `AGENTS.md`:
 

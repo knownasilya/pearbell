@@ -213,10 +213,11 @@ export function request (sock, req, onframe) {
 // Send a message through the daemon (starting it if needed) and wait until
 // every phone has it, or with message.wantsReply until somebody answers.
 // seconds limits the wait (0 = no limit); aborting signal stops waiting, which
-// closes an open question. onframe sees each frame from the daemon.
+// closes an open question. onframe sees each frame from the daemon. start:
+// false fails instead of starting the daemon.
 // Resolves { queued, delivered, missing, reply, error, timedOut }.
-export async function send ({ message, device, route, seconds = 0, signal, onframe = noop }) {
-  const sock = await connect()
+export async function send ({ message, device, route, seconds = 0, signal, onframe = noop, start = true }) {
+  const sock = await connect({ start })
   const delivered = new Set()
   let queued = null
   let reply = null
