@@ -1,5 +1,16 @@
 # Changelog
 
+## Release (2026-10-26)
+
+* pearbell 0.9.1 (patch)
+
+#### :bug: Bug Fix
+* `pearbell`
+  * [#9](https://github.com/knownasilya/pearbell/pull/9) Skip Android notifications while the app is open; keep Stay reachable banner closed ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
 ## Release (2026-10-24)
 
 * pearbell 0.9.0 (minor)
