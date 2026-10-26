@@ -183,7 +183,7 @@ export async function connect ({ start = true } = {}) {
 
   config.load() // create the identity before the daemon races for it
   if (service.installed()) {
-    // launchd owns the daemon; ask it instead of starting a second one.
+    // launchd or systemd owns the daemon; ask it instead of starting a second one.
     service.kickstart()
   } else {
     const log = fs.openSync(logPath(), 'a')

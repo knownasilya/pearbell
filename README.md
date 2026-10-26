@@ -118,15 +118,16 @@ npm link        # puts this checkout's `pearbell` on your PATH
 
 Identity and paired phones live in `~/.config/pearbell/` (set `PEARBELL_HOME` to change it). The daemon logs to `daemon.log` in the same folder.
 
-**Keep the daemon running (macOS).** Any `pearbell` command starts the daemon, but after a reboot nothing runs until you use one. If other tools send through it (see [HTTP API](#http-api)), install the launch agent so it starts at login and comes back if it stops:
+**Keep the daemon running.** Any `pearbell` command starts the daemon, but after a reboot nothing runs until you use one. If other tools send through it (see [HTTP API](#http-api)), install the service so it starts at login and comes back if it stops. On macOS that's a launch agent; on Linux, a systemd user service:
 
 ```bash
-pearbell service install     # ~/Library/LaunchAgents/dev.pearbell.daemon.plist
+pearbell service install     # macOS: ~/Library/LaunchAgents/dev.pearbell.daemon.plist
+                             # Linux: ~/.config/systemd/user/pearbell.service
 pearbell service status
 pearbell service uninstall
 ```
 
-While it is installed, `pearbell stop` and `pearbell http on` restart the daemon through launchd.
+While it is installed, `pearbell stop` and `pearbell http on` restart the daemon through launchd or systemd. On Linux, a user service stops when you log out; to keep it running on a server you don't stay logged in to, run `loginctl enable-linger $USER` once.
 
 ## Install the Android app
 

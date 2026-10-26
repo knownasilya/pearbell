@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
+import os from 'node:os'
 import { parseArgs } from 'node:util'
 import DHT from 'hyperdht'
 import qrcode from 'qrcode-terminal'
@@ -35,7 +36,7 @@ Usage:
                                      make HTTP requests (prints URL, token)
   pearbell service [install|uninstall|status]
                                      Keep the daemon running from login on
-                                     (macOS launch agent)
+                                     (launch agent on macOS, systemd on Linux)
 
 Options for send, ask and update:
   -t, --title <title>                Notification title
@@ -238,7 +239,7 @@ async function runStart () {
 async function runStop () {
   if (service.installed()) {
     service.kickstart({ restart: true })
-    console.log('The launch agent keeps the daemon running, so it was restarted.')
+    console.log(`The ${service.kind()} keeps the daemon running, so it was restarted.`)
     console.log('To stop it for good: pearbell service uninstall')
     return 0
   }
@@ -319,7 +320,7 @@ async function runService () {
   const action = rest[0] || 'status'
 
   if (action === 'install') {
-    // Hand the daemon over to launchd: stop the one the CLI started, if any.
+    // Hand the daemon over to launchd or systemd: stop the one the CLI started, if any.
     try {
       const sock = await control.connect({ start: false })
       let pid = null
@@ -333,19 +334,21 @@ async function runService () {
     } catch {}
     service.install(control.BIN)
     await waitForDaemon()
-    console.log(`Installed ${service.plistPath()}`)
+    console.log(`Installed ${service.file()}`)
     console.log('The daemon now starts at login and restarts if it stops.')
+    if (process.platform === 'linux') console.log(`To keep it running while you're logged out: loginctl enable-linger ${os.userInfo().username}`)
   } else if (action === 'uninstall') {
     service.uninstall()
-    console.log('Removed the launch agent and stopped the daemon. Any pearbell command starts it again.')
+    console.log(`Removed the ${service.kind()} and stopped the daemon. Any pearbell command starts it again.`)
     return 0
   } else if (action !== 'status') {
     throw new Error('Use: pearbell service [install|uninstall|status]')
   }
 
   const s = service.status()
-  if (!s.installed) console.log(service.supported() ? 'Launch agent not installed. Install it with: pearbell service install' : 'pearbell service only supports macOS for now')
-  else console.log(`Launch agent installed, daemon ${s.running ? `running (pid ${s.pid})` : 'not running'}`)
+  const name = service.kind()[0].toUpperCase() + service.kind().slice(1)
+  if (!s.installed) console.log(service.supported() ? `${name} not installed. Install it with: pearbell service install` : 'pearbell service only supports macOS and Linux')
+  else console.log(`${name} installed, daemon ${s.running ? `running (pid ${s.pid})` : 'not running'}`)
   return 0
 }
 
