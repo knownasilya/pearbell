@@ -4,8 +4,10 @@ import SwiftUI
 // A small Markdown renderer for message bodies, like the Android app's
 // (android/app/src/main/java/dev/pearbell/ui/Markdown.kt): **bold**, *italic*,
 // `code`, ~~strike~~, [links](https://…), bare URLs, headings, lists, task
-// lists (- [ ] and - [x]), quotes and fenced code. Only http(s) and mailto links open, so a message cannot
-// launch other apps through odd URL schemes.
+// lists (- [ ] and - [x]), tables, quotes, fenced code and images
+// (![alt](https://…) on a line of its own). Only http(s) and mailto links open,
+// so a message cannot launch other apps through odd URL schemes, and only https
+// images load.
 enum MarkdownBlock: Hashable {
   case paragraph(String)
   case heading(Int, String)
@@ -14,6 +16,15 @@ enum MarkdownBlock: Hashable {
   case ordered(String, String)
   case quote(String)
   case code(String)
+  case table(MarkdownTable)
+  case image(String, URL)
+}
+
+struct MarkdownTable: Hashable {
+  enum Align: Hashable { case leading, center, trailing }
+  var header: [String]
+  var align: [Align]
+  var rows: [[String]]
 }
 
 enum Markdown {
@@ -44,6 +55,21 @@ enum Markdown {
         continue
       }
 
+      if let m = line.wholeMatch(of: #/\s*!\[([^\]]*)\]\(\s*(\S+?)(?:\s+"[^"]*")?\s*\)\s*/#),
+         let url = URL(string: String(m.2)), url.scheme?.lowercased() == "https" {
+        flush()
+        blocks.append(.image(String(m.1), url))
+        i += 1
+        continue
+      }
+
+      if let found = table(lines, at: i) {
+        flush()
+        blocks.append(.table(found.0))
+        i = found.1
+        continue
+      }
+
       if trimmed.isEmpty {
         flush()
       } else if let m = line.firstMatch(of: #/^(#{1,6})\s+(.*)$/#) {
@@ -68,6 +94,58 @@ enum Markdown {
     }
     flush()
     return blocks
+  }
+
+  // A GFM table at lines[at]: a header row, then a delimiter row (| --- | :-: |)
+  // with as many cells. Returns it with the index of the line after it.
+  static func table(_ lines: [String], at: Int) -> (MarkdownTable, Int)? {
+    guard at + 1 < lines.count, lines[at].contains("|"), lines[at + 1].contains("|") else { return nil }
+    let header = cells(lines[at])
+    var align: [MarkdownTable.Align] = []
+    for cell in cells(lines[at + 1]) {
+      guard let m = cell.wholeMatch(of: #/\s*(:?)\s*-+\s*(:?)\s*/#) else { return nil }
+      switch (!m.1.isEmpty, !m.2.isEmpty) {
+      case (true, true): align.append(.center)
+      case (false, true): align.append(.trailing)
+      default: align.append(.leading)
+      }
+    }
+    guard align.count == header.count else { return nil }
+
+    var rows: [[String]] = []
+    var i = at + 2
+    while i < lines.count, lines[i].contains("|"), !lines[i].trimmingCharacters(in: .whitespaces).isEmpty {
+      let row = cells(lines[i])
+      rows.append(header.indices.map { $0 < row.count ? row[$0] : "" })
+      i += 1
+    }
+    return (MarkdownTable(header: header, align: align, rows: rows), i)
+  }
+
+  // "| a | b |" as ["a", "b"]. An escaped \| is a pipe inside a cell.
+  static func cells(_ line: String) -> [String] {
+    var s = Substring(line.trimmingCharacters(in: .whitespaces))
+    if s.hasPrefix("|") { s = s.dropFirst() }
+    if s.hasSuffix("|") && !s.hasSuffix("\\|") { s = s.dropLast() }
+    var cells: [String] = []
+    var cell = ""
+    var escaped = false
+    for c in s {
+      if escaped {
+        cell += c == "|" ? "|" : "\\\(c)"
+        escaped = false
+      } else if c == "\\" {
+        escaped = true
+      } else if c == "|" {
+        cells.append(cell.trimmingCharacters(in: .whitespaces))
+        cell = ""
+      } else {
+        cell.append(c)
+      }
+    }
+    if escaped { cell += "\\" }
+    cells.append(cell.trimmingCharacters(in: .whitespaces))
+    return cells
   }
 
   // One line of inline Markdown, with safe links styled and bare URLs linked.
@@ -108,6 +186,11 @@ enum Markdown {
       case .task(let done, let s): return (done ? "☑ " : "☐ ") + String(inline(s).characters)
       case .ordered(let n, let s): return "\(n). " + String(inline(s).characters)
       case .code(let s): return s
+      case .table(let t):
+        return ([t.header] + t.rows).map { row in
+          row.map { String(inline($0).characters) }.joined(separator: " | ")
+        }.joined(separator: "\n")
+      case .image(let alt, _): return alt.isEmpty ? "Image" : alt
       }
     }.joined(separator: "\n")
   }
@@ -172,20 +255,104 @@ struct MarkdownText: View {
       }
       .fixedSize(horizontal: false, vertical: true)
     case .code(let s):
-      line(Text(s), font: .system(size: size - 1, design: .monospaced))
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceContainer))
+      // Lines keep their indentation and don't wrap; a long one scrolls sideways.
+      ScrollView(.horizontal) {
+        allowSelection(Text(s).font(.system(size: size - 1, design: .monospaced)).lineSpacing(3).fixedSize())
+          .padding(10)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceContainer))
+    case .table(let t):
+      table(t)
+    case .image(let alt, let url):
+      MessageImage(alt: alt, url: url, size: size)
     }
   }
 
-  @ViewBuilder
-  private func line(_ text: Text, font: Font? = nil) -> some View {
-    let styled = text.font(font ?? .system(size: size)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-    if selectable {
-      styled.textSelection(.enabled)
-    } else {
-      styled
+  // Cells don't wrap; a table wider than the popover scrolls sideways.
+  private func table(_ t: MarkdownTable) -> some View {
+    ScrollView(.horizontal) {
+      Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+        GridRow {
+          ForEach(t.header.indices, id: \.self) { c in
+            cell(Text(Markdown.inline(t.header[c])).bold(), t.align[c])
+          }
+        }
+        ForEach(t.rows.indices, id: \.self) { r in
+          Rectangle().fill(Palette.outlineVariant).frame(height: r == 0 ? 2 : 1)
+            .gridCellUnsizedAxes(.horizontal)
+          GridRow {
+            ForEach(t.rows[r].indices, id: \.self) { c in
+              cell(Text(Markdown.inline(t.rows[r][c])), t.align[c])
+            }
+          }
+        }
+      }
+      .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.outlineVariant))
+      .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func cell(_ text: Text, _ align: MarkdownTable.Align) -> some View {
+    allowSelection(text.font(.system(size: size)).fixedSize())
+      .padding(.horizontal, 10)
+      .padding(.vertical, 5)
+      .gridColumnAlignment(align == .center ? .center : align == .trailing ? .trailing : .leading)
+  }
+
+  @ViewBuilder
+  private func allowSelection(_ view: some View) -> some View {
+    if selectable {
+      view.textSelection(.enabled)
+    } else {
+      view
+    }
+  }
+
+  private func line(_ text: Text, font: Font? = nil) -> some View {
+    allowSelection(text.font(font ?? .system(size: size)).lineSpacing(3).fixedSize(horizontal: false, vertical: true))
+  }
+}
+
+// An https image, fit to the width and never shown larger than it is. Until it
+// loads, or if it can't, the alt text stands in.
+struct MessageImage: View {
+  let alt: String
+  let url: URL
+  var size: CGFloat = 13
+  @State private var image: NSImage?
+
+  private static let cache = NSCache<NSURL, NSImage>()
+  private static let maxBytes = 10 << 20
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(nsImage: image)
+          .resizable()
+          .scaledToFit()
+          .frame(maxWidth: image.size.width)
+          .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          .accessibilityLabel(alt)
+      } else {
+        Text(alt.isEmpty ? "Image" : alt)
+          .font(.system(size: size))
+          .italic()
+          .foregroundColor(Palette.onSurfaceVariant)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .task(id: url) { image = await Self.load(url) }
+  }
+
+  private static func load(_ url: URL) async -> NSImage? {
+    if let cached = cache.object(forKey: url as NSURL) { return cached }
+    guard url.scheme?.lowercased() == "https",
+          let data = try? await URLSession.shared.data(from: url).0,
+          data.count <= maxBytes,
+          let image = NSImage(data: data) else { return nil }
+    cache.setObject(image, forKey: url as NSURL)
+    return image
   }
 }

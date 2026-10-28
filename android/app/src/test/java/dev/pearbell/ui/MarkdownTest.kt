@@ -95,4 +95,53 @@ class MarkdownTest {
   @Test fun bracketsWithoutATaskStayABullet() {
     assertEquals("•  [link] text", Markdown.plain("- [link] text"))
   }
+
+  @Test fun table() {
+    val md = "Results:\n\n| Suite | Passed |\n| :--- | ---: |\n| unit | **42** |\n| e2e | 7 |\n\nDone"
+    val parts = Markdown.parts(md)
+    assertEquals(3, parts.size)
+    val table = (parts[1] as Markdown.Part.Grid).table
+    assertEquals(listOf("Suite", "Passed"), table.header)
+    assertEquals(listOf(Markdown.Align.START, Markdown.Align.END), table.align)
+    assertEquals(listOf(listOf("unit", "**42**"), listOf("e2e", "7")), table.rows)
+    assertEquals("Results:\n\nSuite | Passed\nunit | 42\ne2e | 7\n\nDone", Markdown.plain(md))
+  }
+
+  @Test fun tableWithoutOuterPipes() {
+    val table = (Markdown.parts("a | b | c\n-|:-:|-\n1 | 2").single() as Markdown.Part.Grid).table
+    assertEquals(Markdown.Align.CENTER, table.align[1])
+    assertEquals(listOf(listOf("1", "2", "")), table.rows)
+  }
+
+  @Test fun escapedPipeStaysInTheCell() {
+    val table = (Markdown.parts("| cmd |\n| --- |\n| `a \\| b` |").single() as Markdown.Part.Grid).table
+    assertEquals(listOf(listOf("`a | b`")), table.rows)
+  }
+
+  @Test fun pipesWithoutADelimiterRowAreText() {
+    assertEquals("a | b\nc | d", Markdown.plain("a | b\nc | d"))
+    assertTrue(Markdown.parts("| a | b |\n| --- |").single() is Markdown.Part.Prose)
+  }
+
+  @Test fun tableInsideCodeIsCode() {
+    val md = "```md\n| a |\n| - |\n```"
+    assertEquals(listOf(Markdown.Part.Code("md", "| a |\n| - |")), Markdown.parts(md))
+  }
+
+  @Test fun imageOnItsOwnLine() {
+    val parts = Markdown.parts("Chart:\n![build times](https://example.com/c.png \"title\")")
+    assertEquals(Markdown.Part.Image("build times", "https://example.com/c.png"), parts[1])
+    assertEquals("Chart:\nbuild times", Markdown.plain("Chart:\n![build times](https://example.com/c.png)"))
+  }
+
+  @Test fun onlyHttpsImagesLoad() {
+    assertTrue(Markdown.parts("![x](http://example.com/a.png)").single() is Markdown.Part.Prose)
+    assertTrue(Markdown.parts("![x](file:///etc/passwd)").single() is Markdown.Part.Prose)
+  }
+
+  @Test fun imageInsideALineIsItsAltText() {
+    val out = Markdown.render("see ![the chart](https://example.com/c.png) here", links = true)
+    assertEquals("see the chart here", out.text)
+    assertEquals(listOf("https://example.com/c.png" to "the chart"), links(out))
+  }
 }

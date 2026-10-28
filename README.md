@@ -214,7 +214,9 @@ A message can hold up to 16,000 characters. A longer one is cut with a "… (cut
 
 ### Markdown
 
-Message text is Markdown. The app shows **bold**, *italic*, `code`, ~~strike~~, headings, lists, task lists (`- [ ]` and `- [x]`), quotes and fenced code blocks. Links (`[text](https://…)`, `<https://…>` or a bare `https://…`) open in the browser when you tap them on a question card or in a message's details. Only `http`, `https` and `mailto` links open. Notifications show the text without the markup.
+Message text is Markdown. The app shows **bold**, *italic*, `code`, ~~strike~~, headings, lists, task lists (`- [ ]` and `- [x]`), quotes, fenced code blocks, tables and images. Links (`[text](https://…)`, `<https://…>` or a bare `https://…`) open in the browser when you tap them on a question card or in a message's details. Only `http`, `https` and `mailto` links open. Notifications show the text without the markup.
+
+Tables use GitHub's syntax: a header row, a `| --- |` row (`:--`, `:-:` and `--:` align a column left, center or right), then a row per line. Cells don't wrap, so a wide table or a long code line scrolls sideways. An image on a line of its own, `![alt text](https://…)`, shows in the message once it loads; only `https` images load, and the alt text stands in until then (and in the inbox preview and notifications). Loading an image fetches it from its server, which sees your phone's or Mac's IP address.
 
 ```bash
 pearbell ask -a "Ship it,Hold" "## Deploy ready
