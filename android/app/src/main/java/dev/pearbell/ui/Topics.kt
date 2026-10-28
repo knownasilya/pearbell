@@ -1,12 +1,18 @@
 package dev.pearbell.ui
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,22 +21,40 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.pearbell.Hub
 import dev.pearbell.Message
 import dev.pearbell.Peer
 import dev.pearbell.R
@@ -188,5 +212,89 @@ fun TopicTag(topic: String, modifier: Modifier = Modifier) {
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp).widthIn(max = 120.dp)
     )
+  }
+}
+
+// What a topic can be asked, and the message it is about (Ask on a card).
+data class Asking(val topic: String, val about: Message? = null)
+
+private const val PROGRESS = "What's the status? What's done, what are you on now, and what's next?"
+
+// What goes out for an ask about a message: a quote of it, so the session
+// knows which update the question is about, then the question.
+fun askText(text: String, about: Message?): String {
+  val q = text.trim()
+  if (about == null) return q
+  val body = about.body.trim()
+  val quote = if (body.length > 200) body.take(200).trimEnd() + "…" else body
+  return quote.lines().joinToString("\n") { "> $it" } + "\n\n" + q
+}
+
+// Writes to whatever listens on the topic, such as the Claude Code session
+// working on it (see Hub.say). The answer comes back as a message.
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AskSheet(ask: Asking, onDismiss: () -> Unit) {
+  var draft by rememberSaveable(ask) { mutableStateOf("") }
+  val focuser = remember { FocusRequester() }
+  LaunchedEffect(Unit) { focuser.requestFocus() }
+  val accent = MaterialTheme.colorScheme.primary
+  val send = { text: String ->
+    if (text.isNotBlank()) {
+      Hub.say(ask.topic, askText(text, ask.about))
+      onDismiss()
+    }
+  }
+
+  ModalBottomSheet(onDismissRequest = onDismiss) {
+    Column(Modifier.navigationBarsPadding().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 16.dp)) {
+      Text("Ask ${ask.topic}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(
+        "Goes to the session working on it. Its answer lands in your inbox.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+      ask.about?.let { msg ->
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.height(IntrinsicSize.Min)) {
+          Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant, CircleShape))
+          Spacer(Modifier.width(10.dp))
+          Text(
+            rememberMarkdown(msg.body, links = false),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+      }
+      Spacer(Modifier.height(12.dp))
+      if (ask.about == null) {
+        AssistChip(onClick = { send(PROGRESS) }, label = { Text("Progress?") })
+      }
+      TextField(
+        value = draft,
+        onValueChange = { draft = it },
+        placeholder = { Text(if (ask.about == null) "Ask anything…" else "Ask about this…") },
+        modifier = Modifier.fillMaxWidth().focusRequester(focuser),
+        shape = RoundedCornerShape(24.dp),
+        maxLines = 6,
+        colors = TextFieldDefaults.colors(
+          focusedIndicatorColor = Color.Transparent,
+          unfocusedIndicatorColor = Color.Transparent,
+        ),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+        keyboardActions = KeyboardActions(onSend = { send(draft) }),
+        trailingIcon = {
+          IconButton(onClick = { send(draft) }, enabled = draft.isNotBlank()) {
+            Icon(
+              painterResource(R.drawable.ic_send),
+              contentDescription = "Send",
+              tint = if (draft.isNotBlank()) accent else MaterialTheme.colorScheme.outline
+            )
+          }
+        }
+      )
+    }
   }
 }
