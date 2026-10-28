@@ -3,7 +3,8 @@
 // phone core and talks to the Kotlin side over Bare Kit IPC with
 // newline-delimited JSON.
 //
-// Kotlin -> worklet: init, pair, answer, unpair, clear, archive, delete, undelete, rename
+// Kotlin -> worklet: init, pair, answer, unpair, clear, archive, delete, undelete,
+// delete-all, undelete-all, rename
 // worklet -> Kotlin: ready, state, message, updated, edited, paired, pair-error, error
 // (edited: the sender changed a message with an update, see shared/protocol.js)
 import fs from 'bare-fs'
@@ -42,6 +43,8 @@ async function oncommand (cmd) {
     case 'archive': return phone.archive(cmd.id, cmd.archived !== false)
     case 'delete': return phone.delete(cmd.id)
     case 'undelete': return phone.undelete(cmd.id)
+    case 'delete-all': return phone.deleteAll(Array.isArray(cmd.ids) ? cmd.ids : [])
+    case 'undelete-all': return phone.undeleteAll()
     case 'rename': return phone.setName(cmd.name)
   }
 }

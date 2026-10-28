@@ -29,6 +29,7 @@ export class Phone {
     this.links = new Map()
     this.name = cleanName(name)
     this.trash = [] // recently deleted messages, for undo
+    this.cleared = [] // the last "Clear all", for undo
     this.started = false
 
     // A new network (Wi-Fi to mobile data, say) is worth an instant redial.
@@ -168,6 +169,32 @@ export class Phone {
     this.save()
     this._emitState()
     return true
+  }
+
+  // Delete many at once ("Clear all"). The batch is kept apart from the trash,
+  // which only holds a few, so one undo brings all of it back.
+  deleteAll (ids) {
+    const drop = new Set(ids)
+    const removed = this.state.messages.filter((m) => drop.has(m.id))
+    if (!removed.length) return 0
+
+    this.state.messages = this.state.messages.filter((m) => !drop.has(m.id))
+    this.cleared = removed
+    this.save()
+    this._emitState()
+    return removed.length
+  }
+
+  undeleteAll () {
+    const back = this.cleared.filter((m) => !this.findMessage(m.id))
+    this.cleared = []
+    if (!back.length) return 0
+
+    this.state.messages.push(...back)
+    this.state.messages.sort((a, b) => b.receivedAt - a.receivedAt)
+    this.save()
+    this._emitState()
+    return back.length
   }
 
   // The user answered a message, from a notification or from the app.
