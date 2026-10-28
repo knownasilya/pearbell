@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -199,7 +200,8 @@ private fun MessageRow(
                 overflow = TextOverflow.Ellipsis
               )
               statusOf(msg)?.let { (icon, text, color) -> Status(icon, text, color) }
-              if (onAsk != null) AskButton(onAsk, Modifier.align(Alignment.End))
+              // At the start, under the text, so the Ask FAB on the right never hides it.
+              if (onAsk != null) AskButton(onAsk, Modifier.offset(x = (-10).dp))
             }
           }
         }
