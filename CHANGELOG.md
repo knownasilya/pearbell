@@ -2,6 +2,17 @@
 
 ## Release (2026-10-28)
 
+* pearbell 0.14.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#21](https://github.com/knownasilya/pearbell/pull/21) Ask a topic from the phone; one-line topic chips with a topics list ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
+## Release (2026-10-28)
+
 * pearbell 0.13.0 (minor)
 
 #### :rocket: Enhancement
