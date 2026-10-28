@@ -22,7 +22,7 @@ const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import
 
 const INSTRUCTIONS = `pearbell sends messages to the user's phone (and their Mac, if the menu bar app runs) and brings their answers back.
 Use send to tell them something (a job finished, something broke). Use ask when you need a decision and they may be away from the computer: it waits for their answer.
-Message text is Markdown. For progress, send a task list ("- [ ] step" lines) with an id, then call update with the same id and "- [x]" for done steps; that edits the message in place without a new notification.`
+Message text is Markdown, including tables, fenced code blocks and https images. For progress, send a task list ("- [ ] step" lines) with an id, then call update with the same id and "- [x]" for done steps; that edits the message in place without a new notification.`
 
 const target = {
   title: { type: 'string', description: 'Notification title, such as the tool or project name' },

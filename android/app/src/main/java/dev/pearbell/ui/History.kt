@@ -267,7 +267,7 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
 
       Spacer(Modifier.height(18.dp))
       SelectionContainer {
-        Text(rememberMarkdown(msg.body, links = true), style = MaterialTheme.typography.bodyLarge)
+        MarkdownText(msg.body, links = true, style = MaterialTheme.typography.bodyLarge)
       }
 
       Spacer(Modifier.height(20.dp))
