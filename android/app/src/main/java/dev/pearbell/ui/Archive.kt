@@ -44,7 +44,8 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
   val inArchive = all.filter { it.archived }
   val topics = topicsOf(inArchive)
   var picked by rememberSaveable { mutableStateOf<String?>(null) }
-  val topic = picked?.takeIf { t -> topics.any { it.first == t } }
+  val topic = picked?.takeIf { t -> topics.any { it.name == t } }
+  var allTopics by rememberSaveable { mutableStateOf(false) }
   val archived = if (topic == null) inArchive else inArchive.filter { it.topic == topic }
   val days = archived.groupBy { dayLabel(context, it.receivedAt) }
   val snackbar = remember { SnackbarHostState() }
@@ -59,7 +60,7 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
         Text("Archive", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
         if (archived.isNotEmpty()) ClearAllButton { actions.deleteAll(archived) }
       }
-      TopicChips(topics, inArchive.size, topic) { picked = it }
+      TopicChips(topics, inArchive.size, topic, onSelect = { picked = it }, onMore = { allTopics = true })
 
       if (archived.isEmpty()) {
         Column(
@@ -99,6 +100,10 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
     }
 
     SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+  }
+
+  if (allTopics) {
+    TopicsSheet(topics, inArchive.size, topic, emptySet(), onSelect = { picked = it }, onAsk = null) { allTopics = false }
   }
 
   details?.let { id -> all.find { it.id == id } }?.let { msg ->

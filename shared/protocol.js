@@ -17,11 +17,19 @@
 //   phone -> computer  { type: 'ack', id }
 //   phone -> computer  { type: 'reply', id, text }
 //   computer -> phone  { type: 'closed', id }   nobody waits for a reply any more
+//   phone -> computer  { type: 'say', id, topic, text }   the user wrote to a topic
+//   computer -> phone  { type: 'heard', id, listeners }   how many listened (0: nobody)
 //
 // key is an id the sender picked (pearbell send --id). A msg with update: true
 // edits the newest message from the same computer with that key instead of
 // adding one: it takes the new body, and the title and topic when given. When
 // there is no such message (deleted, or never got it), it shows as a new one.
+//
+// say goes to whatever listens on that topic on the computer, such as a
+// Claude Code session running pearbell mcp --channel. The answer, if any,
+// comes back as an ordinary msg on the same topic. The phone resends a say
+// until it hears back, so the computer answers a repeated id without passing
+// the text on again.
 import b4a from 'b4a'
 import z32 from 'z32'
 
@@ -37,6 +45,9 @@ export function clipBody (body) {
   const note = `\n\n… (cut: ${(body.length - keep).toLocaleString('en-US')} more characters)`
   return body.slice(0, keep) + note
 }
+
+// Longest text the phone sends to a topic.
+export const MAX_SAY = 4_000
 
 // A sender-supplied message id: up to 64 characters, no whitespace.
 export const MAX_KEY = 64

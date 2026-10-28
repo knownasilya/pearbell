@@ -8,7 +8,7 @@ import os from 'node:os'
 import b4a from 'b4a'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from '../shared/lines.js'
-import { encodePairCode, toHex } from '../shared/protocol.js'
+import { MAX_SAY, encodePairCode, toHex } from '../shared/protocol.js'
 import { awayReason, decide, idleSeconds, snoozeReason } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
@@ -30,6 +30,8 @@ export class Daemon extends EventEmitter {
     this.messages = new Map()
     this.pairing = null
     this.mac = null // { conn, presence } while the menu bar app is connected
+    this.listeners = new Set() // { topics, write } for each listen on the local socket
+    this.heard = new Map() // say id -> listeners it reached, so a resend is not passed on twice
   }
 
   async start () {
@@ -241,6 +243,19 @@ export class Daemon extends EventEmitter {
     }
   }
 
+  // Hear what the user writes to these topics on a phone (pearbell mcp
+  // --channel, pearbell listen). write gets { type: 'said', id, topic, text,
+  // device }. Returns a function that stops listening.
+  listen (topics, write) {
+    const listener = { topics: new Set(topics), write }
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  listening (topic) {
+    return [...this.listeners].filter((l) => l.topics.has(topic))
+  }
+
   // Add the message's phones to its targets and send it to those online.
   _addPhones (entry) {
     const added = entry.phones.filter((d) => !entry.targets.has(d.publicKey))
@@ -305,6 +320,8 @@ export class Daemon extends EventEmitter {
         this._onack(device, frame.id)
       } else if (frame.type === 'reply') {
         this._onreply(device, conn, frame.id, frame.text)
+      } else if (frame.type === 'say') {
+        this._onsay(device, conn, frame)
       } else if (frame.type === 'pending' && Array.isArray(frame.ids)) {
         // Questions the phone still shows as open, but that we lost (restart).
         for (const id of frame.ids.slice(0, 500)) {
@@ -373,6 +390,27 @@ export class Daemon extends EventEmitter {
     const answer = { text: String(text), device }
     entry.emit('reply', answer)
     this.close(id, answer)
+  }
+
+  // The user wrote to a topic on the phone: pass it to whatever listens there.
+  _onsay (device, conn, frame) {
+    const id = typeof frame.id === 'string' && frame.id.length <= 64 ? frame.id : ''
+    const topic = typeof frame.topic === 'string' ? frame.topic.trim().slice(0, 40) : ''
+    const text = typeof frame.text === 'string' ? frame.text.trim().slice(0, MAX_SAY) : ''
+    if (!id || !topic || !text) return
+
+    let listeners = this.heard.get(id)
+    if (listeners === undefined) {
+      const said = { type: 'said', id, topic, text, device: device.name }
+      const reached = this.listening(topic)
+      for (const l of reached) l.write(said)
+      listeners = reached.length
+
+      this.heard.set(id, listeners)
+      if (this.heard.size > 500) this.heard.delete(this.heard.keys().next().value)
+      this.emit('said', { ...said, listeners })
+    }
+    writeJSON(conn, { type: 'heard', id, listeners })
   }
 
   _onpair (conn, publicKey, frame) {

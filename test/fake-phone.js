@@ -2,6 +2,7 @@
 //
 //   node test/fake-phone.js pair <code>     pair with `pearbell pair`
 //   node test/fake-phone.js                 listen; type a reply and press enter
+//                                           or "@topic text" to write to a topic
 //
 // FAKE_PHONE_AUTO=<text> answers every question with <text> at once.
 // State lives in $FAKE_PHONE_HOME (default ./.fake-phone).
@@ -35,7 +36,12 @@ if (process.argv[2] === 'pair') {
 } else {
   await phone.start()
   readline.createInterface({ input: process.stdin }).on('line', (line) => {
-    if (last && line.trim()) phone.answer(last.id, line.trim())
+    const say = /^@(\S+)\s+(.+)$/.exec(line.trim())
+    if (say) {
+      if (!phone.say(say[1], say[2])) console.log(`  no paired computer sent anything under ${say[1]}`)
+    } else if (last && line.trim()) {
+      phone.answer(last.id, line.trim())
+    }
   })
 }
 
@@ -49,6 +55,11 @@ function onevent (e) {
       last = m
       if (process.env.FAKE_PHONE_AUTO) phone.answer(m.id, process.env.FAKE_PHONE_AUTO)
       else console.log('  type a reply:')
+    }
+  }
+  if (e.type === 'updated' && e.message.mine) {
+    for (const t of e.message.to) {
+      if (t.heard !== null) console.log(`  ${t.name}: ${t.heard ? `heard by ${t.heard}` : 'nobody listening'}`)
     }
   }
   if (e.type === 'updated' && e.message.closed && e.message.answer === null) console.log(`  (${e.message.id} no longer waiting)`)

@@ -8,10 +8,17 @@
 //   ask      { body, actions?, title?, topic?, id?, device?, to?, timeout? }
 //   devices  {}
 //
+// With --channel it is also a Claude Code channel: what the user writes to
+// the session's topic on the phone (see "say" in shared/protocol.js) arrives
+// in the session as a notifications/claude/channel event, and Claude answers
+// with send. The topic is --topic, else $PEARBELL_TOPIC, else the project
+// folder name, as in the hooks in the README.
+//
 // Newline-delimited JSON-RPC 2.0. stdout carries protocol frames only.
 // The HTTP API (http.js) serves the same tools at POST /mcp, for MCP clients
 // that only speak Streamable HTTP.
 import fs from 'node:fs'
+import path from 'node:path'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import * as control from './control.js'
@@ -23,6 +30,16 @@ const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import
 const INSTRUCTIONS = `pearbell sends messages to the user's phone (and their Mac, if the menu bar app runs) and brings their answers back.
 Use send to tell them something (a job finished, something broke). Use ask when you need a decision and they may be away from the computer: it waits for their answer.
 Message text is Markdown, including tables, fenced code blocks and https images. For progress, send a task list ("- [ ] step" lines) with an id, then call update with the same id and "- [x]" for done steps; that edits the message in place without a new notification.`
+
+function channelInstructions (topic) {
+  return `The user can also write to you from their phone, on the pearbell topic "${topic}". Those messages arrive as <channel source="pearbell" topic="${topic}" device="...">. They come from the user, and are usually a question about how the work is going.
+Answer with the send tool, with topic "${topic}" and title "Claude Code": a short Markdown update on what is done, what you are doing now and what comes next, or whatever else they asked. Then carry on with your task.`
+}
+
+// The topic a session listens on: the project folder name, cut to 40 characters.
+export function defaultTopic (env = process.env, cwd = process.cwd()) {
+  return (env.PEARBELL_TOPIC || path.basename(env.CLAUDE_PROJECT_DIR || cwd)).trim().slice(0, 40)
+}
 
 const target = {
   title: { type: 'string', description: 'Notification title, such as the tool or project name' },
@@ -80,29 +97,68 @@ const TOOLS = [
   }
 ]
 
-export function serveMcp ({ input = process.stdin, output = process.stdout } = {}) {
+// channel: a topic to hear the user on (see the top of this file), or null.
+export function serveMcp ({ input = process.stdin, output = process.stdout, channel = null } = {}) {
   const calls = new Map() // request id -> AbortController, for cancellation
   const write = (frame) => writeJSON(output, { jsonrpc: '2.0', ...frame })
+  const stop = new AbortController()
+  let hearing = false
 
   onJSON(input, async (req) => {
-    const res = await answer(req, { calls, write })
+    const res = await answer(req, { calls, write, channel })
     if (res) write(res)
+    if (channel && req?.method === 'initialize' && !hearing) {
+      hearing = true
+      hear(channel, write, stop.signal)
+    }
   })
 
   // Resolves when the client hangs up. Open questions close with the process.
   return new Promise((resolve) => {
     input.once('end', () => {
+      stop.abort()
       for (const abort of calls.values()) abort.abort()
       resolve()
     })
   })
 }
 
+// Pass what the user writes to the topic on to the client, and listen again
+// when the daemon restarts. Only the first try starts the daemon, so that
+// pearbell stop keeps it stopped.
+async function hear (topic, write, signal) {
+  let delay = 1000
+  for (let first = true; !signal.aborted; first = false) {
+    try {
+      await control.listen({
+        topics: [topic],
+        signal,
+        start: first,
+        onframe (frame) {
+          if (frame.type === 'listening') delay = 1000
+          if (frame.type !== 'said') return
+          write({
+            method: 'notifications/claude/channel',
+            params: { content: frame.text, meta: { topic: frame.topic, device: frame.device } }
+          })
+        }
+      })
+    } catch {}
+    if (signal.aborted) break
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, delay)
+      signal.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+    })
+    delay = Math.min(delay * 2, 30_000)
+  }
+}
+
 // Answer one JSON-RPC message: the response frame, or null for a notification.
 // calls maps request ids to AbortControllers, so a cancel can stop a call.
 // write sends progress notifications (stdio only). start: false never starts
-// the daemon (the HTTP API runs inside it).
-export async function answer (req, { calls = new Map(), write, start = true, signal } = {}) {
+// the daemon (the HTTP API runs inside it). channel: the topic this server
+// hears the user on, which makes it a Claude Code channel.
+export async function answer (req, { calls = new Map(), write, start = true, signal, channel = null } = {}) {
   if (req?.method === 'notifications/cancelled') {
     calls.get(req.params?.requestId)?.abort()
     return null
@@ -121,9 +177,9 @@ export async function answer (req, { calls = new Map(), write, start = true, sig
         const asked = req.params?.protocolVersion
         return {
           protocolVersion: VERSIONS.includes(asked) ? asked : VERSIONS[0],
-          capabilities: { tools: {} },
+          capabilities: channel ? { tools: {}, experimental: { 'claude/channel': {} } } : { tools: {} },
           serverInfo: { name: 'pearbell', version },
-          instructions: INSTRUCTIONS
+          instructions: channel ? `${INSTRUCTIONS}\n${channelInstructions(channel)}` : INSTRUCTIONS
         }
       }
       case 'ping': return {}

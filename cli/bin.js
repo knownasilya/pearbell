@@ -11,7 +11,7 @@ import { Daemon } from './daemon.js'
 import { presenceText } from './router.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import { serveHttp } from './http.js'
-import { serveMcp } from './mcp.js'
+import { defaultTopic, serveMcp } from './mcp.js'
 import * as service from './service.js'
 
 const HELP = `pearbell - peer-to-peer messages to your phone
@@ -32,6 +32,11 @@ Usage:
   pearbell stop                      Stop the background daemon
   pearbell mcp                       MCP server on stdin/stdout for AI tools
                                      (send, update, ask and devices tools)
+  pearbell mcp --channel [-T topic]  ...that is also a Claude Code channel:
+                                     what you write to the topic on the
+                                     phone reaches the session
+  pearbell listen [-T topic]         Print what you write to a topic on the
+                                     phone (default topic: this folder name)
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
   pearbell service [install|uninstall|status]
@@ -75,6 +80,7 @@ const { values: opts, positionals } = parseArgs({
     json: { type: 'boolean' },
     quiet: { type: 'boolean', short: 'q' },
     port: { type: 'string' },
+    channel: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' }
   }
 })
@@ -110,6 +116,7 @@ async function run () {
     case 'start': return runStart()
     case 'stop': return runStop()
     case 'mcp': return runMcp()
+    case 'listen': return runListen()
     case 'http': return runHttp()
     case 'service': return runService()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
@@ -254,8 +261,30 @@ async function runStop () {
 }
 
 async function runMcp () {
-  await serveMcp()
+  const channel = opts.channel ? topicOption() : null
+  await serveMcp({ channel })
   return 0
+}
+
+async function runListen () {
+  const topic = topicOption()
+  let error = null
+  await control.listen({
+    topics: [topic],
+    onframe (frame) {
+      if (frame.type === 'listening') log(`listening on ${topic}`)
+      else if (frame.type === 'error') error = frame
+      else if (frame.type === 'said') console.log(opts.json ? JSON.stringify({ id: frame.id, topic: frame.topic, text: frame.text, device: frame.device }) : `${frame.device}: ${frame.text}`)
+    }
+  })
+  if (error) throw daemonError(error)
+  throw new Error('The daemon stopped')
+}
+
+function topicOption () {
+  const topic = (opts.topic ?? defaultTopic()).trim().slice(0, 40)
+  if (!topic) throw new Error('Give a topic with -T')
+  return topic
 }
 
 async function runHttp () {

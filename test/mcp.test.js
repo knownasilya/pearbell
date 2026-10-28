@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { serveHttp } from '../cli/http.js'
+import { defaultTopic } from '../cli/mcp.js'
 
 const BIN = new URL('../cli/bin.js', import.meta.url).pathname
 
@@ -29,10 +30,10 @@ async function fakeDaemon (t, ondaemon) {
 }
 
 // `pearbell mcp` in a child process, talking to a stand-in daemon.
-async function setup (t, ondaemon) {
+async function setup (t, ondaemon, args = []) {
   const { home, requests } = await fakeDaemon(t, ondaemon)
 
-  const child = spawn(process.execPath, [BIN, 'mcp'], { env: { ...process.env, PEARBELL_HOME: home }, stdio: ['pipe', 'pipe', 'inherit'] })
+  const child = spawn(process.execPath, [BIN, 'mcp', ...args], { env: { ...process.env, PEARBELL_HOME: home }, stdio: ['pipe', 'pipe', 'inherit'] })
   t.teardown(() => child.kill())
 
   const pending = new Map()
@@ -176,6 +177,58 @@ test('mcp: exits when the client hangs up', async (t) => {
   child.stdin.end()
   t.is(await exited, 0)
 })
+
+test('mcp: without --channel it is no channel', async (t) => {
+  const { init, requests } = await setup(t, deliver)
+  t.absent(init.result.capabilities.experimental)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  t.is(requests.length, 0, 'no listen')
+})
+
+test('mcp: --channel passes what the user writes to the topic on to the session', async (t) => {
+  const { init, notes, requests } = await setup(t, (req, reply) => {
+    if (req.type !== 'listen') return
+    reply({ type: 'listening', topics: req.topics })
+    reply({ type: 'said', id: 's1', topic: 'demo', text: 'How is it going?', device: 'Pixel 8' })
+  }, ['--channel', '-T', 'demo'])
+
+  t.alike(init.result.capabilities.experimental, { 'claude/channel': {} })
+  t.ok(init.result.instructions.includes('topic "demo"'))
+
+  const note = await waitFor(() => notes.find((n) => n.method === 'notifications/claude/channel'))
+  t.alike(requests[0], { type: 'listen', topics: ['demo'] })
+  t.alike(note.params, { content: 'How is it going?', meta: { topic: 'demo', device: 'Pixel 8' } })
+})
+
+test('mcp: --channel listens again when the daemon hangs up', async (t) => {
+  let listens = 0
+  const { requests } = await setup(t, (req, reply, sock) => {
+    if (req.type !== 'listen') return
+    listens++
+    reply({ type: 'listening', topics: req.topics })
+    if (listens === 1) sock.end()
+  }, ['--channel', '-T', 'demo'])
+
+  await waitFor(() => listens === 2, 5000)
+  t.is(requests.filter((r) => r.type === 'listen').length, 2)
+})
+
+test('mcp: the channel topic is the project folder', (t) => {
+  t.is(defaultTopic({ CLAUDE_PROJECT_DIR: '/home/me/code/pearbell' }, '/tmp'), 'pearbell')
+  t.is(defaultTopic({}, '/home/me/kody'), 'kody')
+  t.is(defaultTopic({ PEARBELL_TOPIC: 'work', CLAUDE_PROJECT_DIR: '/x/y' }, '/tmp'), 'work')
+  t.is(defaultTopic({}, '/x/' + 'a'.repeat(50)).length, 40)
+})
+
+async function waitFor (fn, timeout = 3000) {
+  const until = Date.now() + timeout
+  while (Date.now() < until) {
+    const value = fn()
+    if (value) return value
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error('waitFor timed out')
+}
 
 // POST /mcp on the HTTP API, in this process, with the stand-in daemon.
 async function setupHttp (t, ondaemon) {

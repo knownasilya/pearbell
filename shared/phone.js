@@ -7,13 +7,15 @@
 import DHT from 'hyperdht'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from './lines.js'
-import { cleanKey, clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
+import { MAX_SAY, cleanKey, clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
 
 const MAX_MESSAGES = 200
 const MAX_TOPIC = 40
 const PAIR_TIMEOUT = 30_000
 const MIN_RETRY = 1_000
 const MAX_RETRY = 30_000
+// A say the computer never heard is resent on reconnect for this long.
+const SAY_TTL = 24 * 60 * 60 * 1000
 
 export class Phone {
   constructor ({ dht, state = {}, save = noop, emit = noop, name = '' }) {
@@ -212,6 +214,55 @@ export class Phone {
     return true
   }
 
+  // Computers that sent messages under a topic, so they can take a say.
+  topicPeers (topic) {
+    const keys = new Set()
+    for (const m of this.state.messages) {
+      if (!m.mine && m.topic === topic) keys.add(m.from)
+    }
+    return this.state.peers.filter((p) => keys.has(p.publicKey))
+  }
+
+  // The user wrote to a topic. It goes to each computer that sent messages
+  // under it, and shows in the inbox as the user's own message. Returns it,
+  // or null when no paired computer uses the topic.
+  say (topic, text) {
+    const clean = str(topic, MAX_TOPIC).trim()
+    const body = str(text, MAX_SAY).trim()
+    const peers = clean ? this.topicPeers(clean) : []
+    if (!body || !peers.length) return null
+
+    const msg = {
+      id: toHex(crypto.randomBytes(8)),
+      key: null,
+      mine: true,
+      from: '',
+      fromName: '',
+      to: peers.map((p) => ({ publicKey: p.publicKey, name: p.name, heard: null })),
+      title: '',
+      body,
+      topic: clean,
+      actions: [],
+      wantsReply: false,
+      receivedAt: Date.now(),
+      answer: null,
+      answeredAt: null,
+      closed: false,
+      archived: false,
+      updatedAt: null,
+      updates: 0
+    }
+
+    this.state.messages.unshift(msg)
+    this.state.messages.length = Math.min(this.state.messages.length, MAX_MESSAGES)
+    this.save()
+    this.emit({ type: 'updated', message: msg })
+
+    // A computer that is offline gets it when it reconnects (see _onopen).
+    for (const p of peers) this.links.get(p.publicKey)?.send(sayFrame(msg))
+    return msg
+  }
+
   _link (peer) {
     const link = new Link(this, peer)
     this.links.set(peer.publicKey, link)
@@ -234,6 +285,13 @@ export class Phone {
     }
     // The computer closes the ones it no longer knows about.
     if (pending.length) link.send({ type: 'pending', ids: pending })
+
+    // What the user wrote to a topic while the computer was away.
+    const now = Date.now()
+    for (const msg of this.state.messages) {
+      if (!msg.mine || now - msg.receivedAt > SAY_TTL) continue
+      if (msg.to.some((t) => t.publicKey === link.peer.publicKey && t.heard === null)) link.send(sayFrame(msg))
+    }
   }
 
   _onframe (link, frame) {
@@ -242,6 +300,18 @@ export class Phone {
 
     if (frame.type === 'msg') this._onmessage(link, frame)
     else if (frame.type === 'closed') this._onclosed(frame.id)
+    else if (frame.type === 'heard') this._onheard(link, frame)
+  }
+
+  // The computer passed a say on to this many listeners.
+  _onheard (link, frame) {
+    const msg = this.findMessage(frame.id)
+    const to = msg?.mine ? msg.to.find((t) => t.publicKey === link.peer.publicKey) : null
+    if (!to) return
+
+    to.heard = Number.isInteger(frame.listeners) && frame.listeners > 0 ? frame.listeners : 0
+    this.save()
+    this.emit({ type: 'updated', message: msg })
   }
 
   // The computer may have been renamed since pairing.
@@ -394,6 +464,10 @@ class Link {
       this.delay = Math.min(this.delay * 2, MAX_RETRY)
     }
   }
+}
+
+function sayFrame (msg) {
+  return { type: 'say', id: msg.id, topic: msg.topic, text: msg.body }
 }
 
 function cleanName (name) {

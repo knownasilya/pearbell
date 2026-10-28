@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -148,49 +149,106 @@ private fun MessageRow(
       modifier = Modifier.clip(shape),
       backgroundContent = { SwipeBackground(swipe.dismissDirection, inArchive) }
     ) {
-      Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Row(
-          Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onOpen, onLongClick = { copy(context, msg.body) })
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-            .animateContentSize()
-        ) {
-          Avatar(msg.title.ifEmpty { msg.fromName })
-          Spacer(Modifier.width(14.dp))
-          Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                msg.title.ifEmpty { msg.fromName },
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-              )
-              if (msg.topic.isNotEmpty()) {
+      if (msg.mine) {
+        MineRow(msg, shape, onOpen)
+      } else {
+        Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+          Row(
+            Modifier
+              .fillMaxWidth()
+              .combinedClickable(onClick = onOpen, onLongClick = { copy(context, msg.body) })
+              .padding(horizontal = 16.dp, vertical = 14.dp)
+              .animateContentSize()
+          ) {
+            Avatar(msg.title.ifEmpty { msg.fromName })
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                  msg.title.ifEmpty { msg.fromName },
+                  style = MaterialTheme.typography.titleSmall,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.weight(1f)
+                )
+                if (msg.topic.isNotEmpty()) {
+                  Spacer(Modifier.width(8.dp))
+                  TopicTag(msg.topic)
+                }
                 Spacer(Modifier.width(8.dp))
-                TopicTag(msg.topic)
+                Text(
+                  messageTime(context, msg, LocalNow.current),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = if (msg.updatedAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
               }
-              Spacer(Modifier.width(8.dp))
+              Spacer(Modifier.height(2.dp))
               Text(
-                messageTime(context, msg, LocalNow.current),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (msg.updatedAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                rememberMarkdown(msg.body, links = false),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
               )
+              statusOf(msg)?.let { (icon, text, color) -> Status(icon, text, color) }
             }
-            Spacer(Modifier.height(2.dp))
-            Text(
-              rememberMarkdown(msg.body, links = false),
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 3,
-              overflow = TextOverflow.Ellipsis
-            )
-            statusOf(msg)?.let { (icon, text, color) -> Status(icon, text, color) }
           }
         }
       }
     }
+  }
+}
+
+// Something the user wrote to a topic: right-aligned, in the accent color.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MineRow(msg: Message, shape: Shape, onOpen: () -> Unit) {
+  val context = LocalContext.current
+  Surface(shape = shape, color = MaterialTheme.colorScheme.primaryContainer) {
+    Column(
+      Modifier
+        .fillMaxWidth()
+        .combinedClickable(onClick = onOpen, onLongClick = { copy(context, msg.body) })
+        .padding(horizontal = 16.dp, vertical = 14.dp),
+      horizontalAlignment = Alignment.End
+    ) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          "You → ${msg.to.joinToString { it.name }}",
+          style = MaterialTheme.typography.titleSmall,
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false)
+        )
+        Spacer(Modifier.width(8.dp))
+        TopicTag(msg.topic)
+        Spacer(Modifier.width(8.dp))
+        Text(messageTime(context, msg, LocalNow.current), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+      }
+      Spacer(Modifier.height(4.dp))
+      Text(msg.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 3, overflow = TextOverflow.Ellipsis)
+      val (text, heard) = heardStatus(msg)
+      Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (heard) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        modifier = Modifier.padding(top = 6.dp)
+      )
+    }
+  }
+}
+
+// What came of a message the user wrote: "Heard by 1 session", "Waiting
+// for laptop", "Nobody listening on laptop". The flag says someone heard it.
+fun heardStatus(msg: Message): Pair<String, Boolean> {
+  val sessions = msg.to.sumOf { it.heard ?: 0 }
+  val waiting = msg.to.filter { it.heard == null }.joinToString { it.name }
+  return when {
+    sessions > 0 -> "Heard by $sessions ${if (sessions == 1) "session" else "sessions"}" +
+      (if (waiting.isNotEmpty()) ", waiting for $waiting" else "") to true
+    waiting.isNotEmpty() -> "Waiting for $waiting" to false
+    else -> "Nobody listening on ${msg.to.joinToString { it.name }}" to false
   }
 }
 
@@ -242,6 +300,7 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
   val context = LocalContext.current
   val time = remember { DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.MEDIUM) }
   val status = when {
+    msg.mine -> heardStatus(msg).first
     msg.answer != null -> "Replied “${msg.answer}”"
     msg.wantsReply && msg.closed -> "Expired without a reply"
     msg.open -> "Waiting for your answer"
@@ -253,12 +312,15 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
       Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp)
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Avatar(msg.title.ifEmpty { msg.fromName }, 44.dp)
+        Avatar(if (msg.mine) "You" else msg.title.ifEmpty { msg.fromName }, 44.dp)
         Spacer(Modifier.width(14.dp))
         Column {
-          Text(msg.title.ifEmpty { msg.fromName }, style = MaterialTheme.typography.titleLarge)
+          Text(if (msg.mine) "You" else msg.title.ifEmpty { msg.fromName }, style = MaterialTheme.typography.titleLarge)
           Text(
-            listOfNotNull(if (msg.wantsReply) "Question" else "Notification", if (msg.archived) "Archived" else null).joinToString(" · "),
+            listOfNotNull(
+              if (msg.mine) "Written to a topic" else if (msg.wantsReply) "Question" else "Notification",
+              if (msg.archived) "Archived" else null
+            ).joinToString(" · "),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -272,9 +334,10 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
 
       Spacer(Modifier.height(20.dp))
       HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-      Detail("From", msg.fromName, msg.from.takeIf { it.isNotEmpty() }?.let { it.take(16) + "…" })
+      if (msg.mine) Detail("To", msg.to.joinToString { it.name })
+      else Detail("From", msg.fromName, msg.from.takeIf { it.isNotEmpty() }?.let { it.take(16) + "…" })
       if (msg.topic.isNotEmpty()) Detail("Topic", msg.topic)
-      Detail("Received", time.format(msg.receivedAt))
+      Detail(if (msg.mine) "Sent" else "Received", time.format(msg.receivedAt))
       msg.updatedAt?.let { Detail("Updated", time.format(it), if (msg.updates > 1) "${msg.updates} updates" else null) }
       if (msg.wantsReply) Detail("Options", msg.actions.joinToString(" · ").ifEmpty { "Free text reply" })
       Detail("Status", status)

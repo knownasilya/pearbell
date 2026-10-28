@@ -290,6 +290,77 @@ test('unknown keys cannot connect', async (t) => {
   t.absent(daemon.isConnected(stranger.publicKey.toString('hex')))
 })
 
+test('say reaches a listener on the topic and the phone hears how many', async (t) => {
+  const { daemon, phone, events, device } = await setup(t)
+
+  const said = []
+  const stop = daemon.listen(['builds'], (f) => said.push(f))
+  t.teardown(stop)
+
+  t.is(phone.say('builds', 'How is it going?'), null, 'no computer sent anything under the topic yet')
+
+  const entry = daemon.send({ message: { title: '', topic: 'builds', body: 'Started', actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+
+  const msg = phone.say('builds', '  How is it going?  ')
+  t.ok(msg.mine)
+  t.is(msg.body, 'How is it going?')
+  t.alike(msg.to.map((x) => x.name), ['laptop'])
+  t.is(msg.to[0].heard, null)
+
+  await waitFor(() => said.length === 1)
+  t.alike(said[0], { type: 'said', id: msg.id, topic: 'builds', text: 'How is it going?', device: 'pixel' })
+
+  await waitFor(() => phone.findMessage(msg.id).to[0].heard === 1)
+  t.ok(events.some((e) => e.type === 'updated' && e.message.id === msg.id && e.message.to[0].heard === 1))
+  t.absent(events.some((e) => e.type === 'message' && e.message.mine), 'no notification for your own message')
+})
+
+test('say with nobody listening comes back as 0', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const entry = daemon.send({ message: { title: '', topic: 'kody', body: 'hi', actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+  daemon.listen(['other'], () => t.fail('wrong topic'))
+
+  const msg = phone.say('kody', 'Status?')
+  await waitFor(() => phone.findMessage(msg.id).to[0].heard === 0)
+  t.pass('nobody listening')
+})
+
+test('say waits for the computer and goes out on reconnect', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const entry = daemon.send({ message: { title: '', topic: 'ci', body: 'hi', actions: [], wantsReply: false }, targets: [device] })
+  await once(entry, 'delivered')
+
+  const said = []
+  daemon.listen(['ci'], (f) => said.push(f))
+  daemon.conns.get(device.publicKey).destroy()
+  await waitFor(() => !phone.snapshot().peers[0].connected)
+
+  const msg = phone.say('ci', 'Still going?')
+  await waitFor(() => phone.findMessage(msg.id).to[0].heard === 1)
+  t.is(said.length, 1)
+})
+
+test('a repeated say is not passed on twice', async (t) => {
+  const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
+  const device = { publicKey: 'ab', name: 'pixel' }
+  const frames = []
+  const conn = { destroyed: false, write: (buf) => frames.push(JSON.parse(buf.toString())) }
+  const said = []
+  daemon.listen(['ci', 'other'], (f) => said.push(f))
+  daemon.listen(['ci'], (f) => said.push(f))
+
+  daemon._onsay(device, conn, { type: 'say', id: 's1', topic: ' ci ', text: 'Status?' })
+  daemon._onsay(device, conn, { type: 'say', id: 's1', topic: 'ci', text: 'Status?' })
+  daemon._onsay(device, conn, { type: 'say', id: 's2', topic: '', text: 'x' })
+
+  t.is(said.length, 2, 'both listeners, once')
+  t.alike(frames, [{ type: 'heard', id: 's1', listeners: 2 }, { type: 'heard', id: 's1', listeners: 2 }])
+})
+
 function once (emitter, name) {
   return new Promise((resolve) => emitter.once(name, resolve))
 }
