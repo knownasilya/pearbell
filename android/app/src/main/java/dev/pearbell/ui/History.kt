@@ -7,12 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -101,17 +105,21 @@ fun rememberMessageActions(snackbar: SnackbarHostState): MessageActions {
 }
 
 // Day-grouped rows. Swipe right deletes; swipe left archives (or, in the
-// archive, moves back to the inbox).
+// archive, moves back to the inbox). Messages under a topic in askable get
+// an Ask button.
 fun LazyListScope.history(
   days: Map<String, List<Message>>,
   inArchive: Boolean,
   actions: MessageActions,
+  askable: Set<String> = emptySet(),
+  onAsk: (Message) -> Unit = {},
   onOpen: (Message) -> Unit,
 ) {
   for ((day, list) in days) {
     item(key = "h-$day") { SectionHeader(day, null, Modifier.animateItem()) }
     itemsIndexed(list, key = { _, m -> m.id }) { i, msg ->
-      MessageRow(msg, first = i == 0, last = i == list.lastIndex, inArchive, actions, { onOpen(msg) }, Modifier.animateItem())
+      val ask = if (!msg.mine && msg.topic in askable) ({ onAsk(msg) }) else null
+      MessageRow(msg, first = i == 0, last = i == list.lastIndex, inArchive, actions, ask, { onOpen(msg) }, Modifier.animateItem())
     }
   }
 }
@@ -124,6 +132,7 @@ private fun MessageRow(
   last: Boolean,
   inArchive: Boolean,
   actions: MessageActions,
+  onAsk: (() -> Unit)?,
   onOpen: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -191,6 +200,8 @@ private fun MessageRow(
                 overflow = TextOverflow.Ellipsis
               )
               statusOf(msg)?.let { (icon, text, color) -> Status(icon, text, color) }
+              // At the start, under the text, so the Ask FAB on the right never hides it.
+              if (onAsk != null) AskButton(onAsk, Modifier.offset(x = (-10).dp))
             }
           }
         }
@@ -288,6 +299,20 @@ private fun statusOf(msg: Message): Triple<Int, String, Color>? = when {
   else -> null
 }
 
+// Asks the session that sent a message about it (AskSheet).
+@Composable
+private fun AskButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+  TextButton(
+    onClick = onClick,
+    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+    modifier = modifier.height(32.dp)
+  ) {
+    Icon(painterResource(R.drawable.ic_reply), contentDescription = null, modifier = Modifier.size(16.dp))
+    Spacer(Modifier.width(6.dp))
+    Text("Ask")
+  }
+}
+
 @Composable
 private fun Status(icon: Int, text: String, color: Color) {
   Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -299,7 +324,7 @@ private fun Status(icon: Int, text: String, color: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit) {
+fun MessageDetails(msg: Message, actions: MessageActions, onAsk: (() -> Unit)? = null, onDismiss: () -> Unit) {
   val context = LocalContext.current
   val time = remember { DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.MEDIUM) }
   val status = when {
@@ -349,6 +374,14 @@ fun MessageDetails(msg: Message, actions: MessageActions, onDismiss: () -> Unit)
       Detail("Message ID", msg.id, mono = true)
 
       Spacer(Modifier.height(20.dp))
+      if (onAsk != null) {
+        Button(onClick = onAsk, modifier = Modifier.fillMaxWidth()) {
+          Icon(painterResource(R.drawable.ic_reply), contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(Modifier.width(8.dp))
+          Text("Ask ${msg.topic} about this", maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(8.dp))
+      }
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { copy(context, msg.body) }) {
           Icon(painterResource(R.drawable.ic_copy), contentDescription = null, modifier = Modifier.size(18.dp))

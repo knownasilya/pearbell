@@ -36,4 +36,12 @@ class TopicsTest {
     val queued = msg("m", "t", mine = true, to = listOf(Recipient("k", "laptop", 0, queued = true)))
     assertEquals("Queued on laptop for Claude's next step", heardStatus(queued).first)
   }
+
+  @Test
+  fun askAboutAMessageQuotesIt() {
+    val about = msg("1", "kody").copy(body = "Tests pass\nPushed the branch")
+    assertEquals("> Tests pass\n> Pushed the branch\n\nWhat's next?", askText(" What's next? ", about))
+    assertEquals("What's next?", askText("What's next?", null))
+    assertEquals(201, askText("q", msg("2", "kody").copy(body = "x".repeat(500))).lines().first().length - 2)
+  }
 }

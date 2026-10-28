@@ -36,8 +36,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,7 +53,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,8 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -105,9 +102,8 @@ private fun Inbox(
   val topic = picked?.takeIf { t -> topics.any { it.name == t } }
   val askable = askableTopics(all, peers)
   var allTopics by rememberSaveable { mutableStateOf(false) }
-  // Bumped to put the cursor in the ask bar (Ask in the topics sheet).
-  var askFocus by remember { mutableIntStateOf(0) }
-  val asking = topic != null && topic in askable
+  var asking by remember { mutableStateOf<Asking?>(null) }
+  val canAsk = topic != null && topic in askable
   val messages = if (topic == null) inbox else inbox.filter { it.topic == topic }
   val open = messages.filter { it.open }
   val rest = messages.filterNot { it.open }
@@ -164,12 +160,12 @@ private fun Inbox(
       }
 
       LazyColumn(
-        // The ask bar below takes the keyboard's room when it shows.
-        Modifier.fillMaxWidth().weight(1f).then(if (asking) Modifier else Modifier.imePadding()),
+        Modifier.fillMaxWidth().weight(1f).imePadding(),
         state = list,
         contentPadding = PaddingValues(
           start = 16.dp, end = 16.dp, top = 8.dp,
-          bottom = if (asking) 16.dp else 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+          // Room to scroll the last message out from under the Ask button.
+          bottom = (if (canAsk) 88.dp else 24.dp) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         )
       ) {
         if (open.isNotEmpty()) {
@@ -179,19 +175,26 @@ private fun Inbox(
           }
         }
 
-        history(days, inArchive = false, actions) { details = it.id }
+        history(days, inArchive = false, actions, askable, onAsk = { asking = Asking(it.topic, it) }) { details = it.id }
 
         if (rest.isNotEmpty()) {
           item(key = "hint") { SwipeTip("Tap for details · swipe left to archive, right to delete", Modifier.animateItem()) }
         }
       }
+    }
 
-      if (asking) AskBar(topic, askFocus)
+    if (canAsk) {
+      ExtendedFloatingActionButton(
+        onClick = { asking = Asking(topic) },
+        icon = { Icon(painterResource(R.drawable.ic_reply), contentDescription = null) },
+        text = { Text("Ask", maxLines = 1) },
+        modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(16.dp)
+      )
     }
 
     SnackbarHost(
       snackbar,
-      Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = if (asking) 132.dp else 0.dp)
+      Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (canAsk) 72.dp else 0.dp)
     )
   }
 
@@ -199,13 +202,16 @@ private fun Inbox(
     TopicsSheet(
       topics, inbox.size, topic, askable,
       onSelect = { picked = it },
-      onAsk = { picked = it; askFocus++ },
+      onAsk = { picked = it; asking = Asking(it) },
     ) { allTopics = false }
   }
 
   details?.let { id -> all.find { it.id == id } }?.let { msg ->
-    MessageDetails(msg, actions) { details = null }
+    val ask = if (!msg.mine && msg.topic in askable) ({ asking = Asking(msg.topic, msg); details = null }) else null
+    MessageDetails(msg, actions, ask) { details = null }
   }
+
+  asking?.let { AskSheet(it) { asking = null } }
 }
 
 @Composable
@@ -340,56 +346,6 @@ private fun QuestionCard(msg: Message, onOpen: () -> Unit, modifier: Modifier = 
         keyboardActions = KeyboardActions(onSend = { send() }),
         trailingIcon = {
           IconButton(onClick = send, enabled = draft.isNotBlank()) {
-            Icon(
-              painterResource(R.drawable.ic_send),
-              contentDescription = "Send",
-              tint = if (draft.isNotBlank()) accent else MaterialTheme.colorScheme.outline
-            )
-          }
-        }
-      )
-    }
-  }
-}
-
-// Write to whatever listens on the topic, such as the Claude Code session
-// working on it (pearbell mcp --channel). The answer comes back as a message.
-@Composable
-private fun AskBar(topic: String, focus: Int) {
-  var draft by rememberSaveable(topic) { mutableStateOf("") }
-  val focuser = remember { FocusRequester() }
-  LaunchedEffect(focus) { if (focus > 0) focuser.requestFocus() }
-  val accent = MaterialTheme.colorScheme.primary
-  val send = { text: String ->
-    if (text.isNotBlank()) {
-      Hub.say(topic, text.trim())
-      draft = ""
-    }
-  }
-
-  Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-    Column(Modifier.navigationBarsPadding().imePadding().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
-      AssistChip(
-        onClick = { send("What's the status? What's done, what are you on now, and what's next?") },
-        label = { Text("Progress?") }
-      )
-      TextField(
-        value = draft,
-        onValueChange = { draft = it },
-        placeholder = { Text("Ask $topic…", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        modifier = Modifier.fillMaxWidth().focusRequester(focuser),
-        shape = RoundedCornerShape(24.dp),
-        maxLines = 4,
-        colors = TextFieldDefaults.colors(
-          focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-          unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-          focusedIndicatorColor = Color.Transparent,
-          unfocusedIndicatorColor = Color.Transparent,
-        ),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-        keyboardActions = KeyboardActions(onSend = { send(draft) }),
-        trailingIcon = {
-          IconButton(onClick = { send(draft) }, enabled = draft.isNotBlank()) {
             Icon(
               painterResource(R.drawable.ic_send),
               contentDescription = "Send",

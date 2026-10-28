@@ -357,11 +357,11 @@ Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.j
 
 ### Ask a topic from your phone
 
-From the phone you can write to a topic that a computer has sent messages under, and get an answer from the Claude Code session working on it. Pick the topic's chip in the inbox: a bar at the bottom says "Ask pearbell…", with a **Progress?** button that asks for a status update in one tap. Or open the list of topics and tap **Ask** next to one.
+From the phone you can write to a topic that a computer has sent messages under, and get an answer from the Claude Code session working on it. Pick the topic's chip in the inbox and tap the **Ask** button, or open the list of topics and tap **Ask** next to one. A drawer opens to write in, with a **Progress?** button that asks for a status update in one tap. To ask about one update, tap **Ask** on its card (or in its details): the question goes out with a quote of that message.
 
 What you write shows in the inbox as your own message, with what came of it: **Heard by 1 session**, **Queued** for Claude's next step (see hooks below), **Waiting for** a computer that is offline (it goes out when the phone reconnects), or **Nobody listening**. The answer comes back as a normal message on the same topic.
 
-The [menu bar app](macos/README.md) on the Mac has the same chips, list and ask bar, for the sessions on that Mac.
+The [menu bar app](macos/README.md) on the Mac has the same chips and list, and an ask bar, for the sessions on that Mac.
 
 A session on the computer can pick it up in two ways. Both use the project folder's name as the topic, like the [hooks](#claude-code-hooks) below.
 
