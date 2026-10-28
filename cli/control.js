@@ -13,14 +13,17 @@
 //   daemon -> app  { type: 'closed', id, answer?, device? }
 //   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open
 // key and update work as on the phone (see shared/protocol.js).
+// notify says whether the app shows a notification; otherwise it only keeps
+// the message in its inbox, because the phone got it.
 //
 // pearbell mcp --channel and pearbell listen keep one open too, to hear what
 // the user writes to a topic on the phone:
 //   cli -> daemon  { type: 'listen', topics }
 //   daemon -> cli  { type: 'listening', topics }
-//   daemon -> cli  { type: 'said', id, topic, text, device }
-// notify says whether the app shows a notification; otherwise it only keeps
-// the message in its inbox, because the phone got it.
+//   daemon -> cli  { type: 'said', id, topic, text, device, at }
+// pearbell inbox takes what nobody listened to yet:
+//   cli -> daemon  { type: 'inbox', topic }
+//   daemon -> cli  { type: 'inbox', messages: [{ id, topic, text, device, at }] }
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -129,6 +132,11 @@ function handle (daemon, sock, req) {
     const stop = daemon.listen(topics, reply)
     sock.once('close', stop)
     reply({ type: 'listening', topics })
+  } else if (req.type === 'inbox') {
+    const topic = String(req.topic || '').trim().slice(0, 40)
+    const messages = topic ? daemon.takeInbox(topic).map(({ type, ...said }) => said) : []
+    reply({ type: 'inbox', messages })
+    sock.end()
   } else if (req.type === 'send') {
     const targets = config.findDevices({ devices: daemon.devices }, req.device)
     const error = badKey(req.message?.key, req.message?.update === true) || noTarget(daemon, targets, req.device)
@@ -239,6 +247,17 @@ export async function listen ({ topics, onframe = noop, signal, start = true }) 
   signal?.addEventListener('abort', abort)
   await request(sock, { type: 'listen', topics }, onframe)
   signal?.removeEventListener('abort', abort)
+}
+
+// Take what the user wrote to a topic on the phone while nothing listened.
+// Resolves the messages, oldest first.
+export async function inbox ({ topic, start = true }) {
+  const sock = await connect({ start })
+  let messages = []
+  await request(sock, { type: 'inbox', topic }, (frame) => {
+    if (frame.type === 'inbox' && Array.isArray(frame.messages)) messages = frame.messages
+  })
+  return messages
 }
 
 // Send a message through the daemon (starting it if needed) and wait until

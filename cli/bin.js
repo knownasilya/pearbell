@@ -12,6 +12,7 @@ import { presenceText } from './router.js'
 import { MAX_BODY } from '../shared/protocol.js'
 import { serveHttp } from './http.js'
 import { defaultTopic, serveMcp } from './mcp.js'
+import { hookOutput, inboxPrompt } from './hook.js'
 import * as service from './service.js'
 
 const HELP = `pearbell - peer-to-peer messages to your phone
@@ -37,6 +38,9 @@ Usage:
                                      phone reaches the session
   pearbell listen [-T topic]         Print what you write to a topic on the
                                      phone (default topic: this folder name)
+  pearbell inbox [-T topic] [--hook] Print (and take) what you wrote to the
+                                     topic while nothing listened. --hook:
+                                     as a Claude Code hook, hand it to Claude
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
   pearbell service [install|uninstall|status]
@@ -81,6 +85,7 @@ const { values: opts, positionals } = parseArgs({
     quiet: { type: 'boolean', short: 'q' },
     port: { type: 'string' },
     channel: { type: 'boolean' },
+    hook: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' }
   }
 })
@@ -117,6 +122,7 @@ async function run () {
     case 'stop': return runStop()
     case 'mcp': return runMcp()
     case 'listen': return runListen()
+    case 'inbox': return opts.hook ? runInboxHook() : runInbox()
     case 'http': return runHttp()
     case 'service': return runService()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
@@ -279,6 +285,37 @@ async function runListen () {
   })
   if (error) throw daemonError(error)
   throw new Error('The daemon stopped')
+}
+
+async function runInbox () {
+  const topic = topicOption()
+  let messages = []
+  try {
+    messages = await control.inbox({ topic, start: false })
+  } catch {} // no daemon, nothing waiting
+  for (const m of messages) console.log(opts.json ? JSON.stringify(m) : `${m.device}: ${m.text}`)
+  return 0
+}
+
+// pearbell inbox --hook, from a Claude Code hook (PostToolUse, Stop,
+// UserPromptSubmit). Prints nothing when nothing waits, and never fails the
+// hook: a hook error would show in the session.
+async function runInboxHook () {
+  try {
+    let input = {}
+    if (!process.stdin.isTTY) {
+      const chunks = []
+      for await (const chunk of process.stdin) chunks.push(chunk)
+      try { input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') } catch {}
+    }
+    const topic = (opts.topic ?? defaultTopic(process.env, input.cwd || process.cwd())).trim().slice(0, 40)
+    if (!topic) return 0
+
+    const messages = await control.inbox({ topic, start: false })
+    if (!messages.length) return 0
+    console.log(JSON.stringify(hookOutput(input.hook_event_name, inboxPrompt(topic, messages))))
+  } catch {}
+  return 0
 }
 
 function topicOption () {

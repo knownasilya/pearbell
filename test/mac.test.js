@@ -252,10 +252,12 @@ test('mac: the app writes to a topic, and hears how many listened', async (t) =>
   writeJSON(mac.sock, { type: 'say', id: 'm2', topic: 'kody', text: 'Status?' })
   await waitFor(() => mac.frames.filter((f) => f.type === 'heard').length === 2)
 
-  t.alike(said, [{ type: 'said', id: 'm1', topic: 'builds', text: 'Status?', device: 'this Mac' }])
+  const { at, ...rest } = said[0]
+  t.alike(rest, { type: 'said', id: 'm1', topic: 'builds', text: 'Status?', device: 'this Mac' })
+  t.ok(at > 0)
   t.alike(mac.frames.filter((f) => f.type === 'heard'), [
-    { type: 'heard', id: 'm1', listeners: 1 },
-    { type: 'heard', id: 'm2', listeners: 0 }
+    { type: 'heard', id: 'm1', listeners: 1, queued: false },
+    { type: 'heard', id: 'm2', listeners: 0, queued: true }
   ])
 })
 

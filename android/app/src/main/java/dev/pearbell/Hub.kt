@@ -10,8 +10,9 @@ import org.json.JSONObject
 data class Peer(val publicKey: String, val name: String, val pairedAt: Long, val connected: Boolean)
 
 // A computer the user wrote to, and how many listeners there heard it: null
-// while it has not answered yet, 0 when nothing listens on the topic.
-data class Recipient(val publicKey: String, val name: String, val heard: Int?)
+// while it has not answered yet, 0 when nothing listens on the topic. queued:
+// it waits there for a Claude Code hook (pearbell inbox) to take it.
+data class Recipient(val publicKey: String, val name: String, val heard: Int?, val queued: Boolean = false)
 
 data class Message(
   val id: String,
@@ -156,7 +157,11 @@ object Hub {
       mine = o.optBoolean("mine"),
       to = if (to == null) emptyList() else (0 until to.length()).map {
         val r = to.getJSONObject(it)
-        Recipient(r.getString("publicKey"), pretty(r.optString("name")), if (r.isNull("heard") || !r.has("heard")) null else r.optInt("heard"))
+        Recipient(
+          r.getString("publicKey"), pretty(r.optString("name")),
+          if (r.isNull("heard") || !r.has("heard")) null else r.optInt("heard"),
+          r.optBoolean("queued"),
+        )
       },
     )
   }

@@ -239,14 +239,17 @@ private fun MineRow(msg: Message, shape: Shape, onOpen: () -> Unit) {
   }
 }
 
-// What came of a message the user wrote: "Heard by 1 session", "Waiting
-// for laptop", "Nobody listening on laptop". The flag says someone heard it.
+// What came of a message the user wrote: "Heard by 1 session", "Queued on
+// laptop for Claude's next step", "Waiting for laptop", "Nobody listening on
+// laptop". The flag says someone heard it.
 fun heardStatus(msg: Message): Pair<String, Boolean> {
   val sessions = msg.to.sumOf { it.heard ?: 0 }
   val waiting = msg.to.filter { it.heard == null }.joinToString { it.name }
+  val queued = msg.to.filter { it.heard == 0 && it.queued }.joinToString { it.name }
   return when {
     sessions > 0 -> "Heard by $sessions ${if (sessions == 1) "session" else "sessions"}" +
       (if (waiting.isNotEmpty()) ", waiting for $waiting" else "") to true
+    queued.isNotEmpty() -> "Queued on $queued for Claude's next step" to false
     waiting.isNotEmpty() -> "Waiting for $waiting" to false
     else -> "Nobody listening on ${msg.to.joinToString { it.name }}" to false
   }

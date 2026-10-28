@@ -18,7 +18,9 @@
 //   phone -> computer  { type: 'reply', id, text }
 //   computer -> phone  { type: 'closed', id }   nobody waits for a reply any more
 //   phone -> computer  { type: 'say', id, topic, text }   the user wrote to a topic
-//   computer -> phone  { type: 'heard', id, listeners }   how many listened (0: nobody)
+//   computer -> phone  { type: 'heard', id, listeners, queued? }   how many listened
+//                      (0: nobody; queued: it waits for pearbell inbox, and
+//                      another heard follows when a session takes it)
 //
 // key is an id the sender picked (pearbell send --id). A msg with update: true
 // edits the newest message from the same computer with that key instead of
@@ -29,7 +31,8 @@
 // Claude Code session running pearbell mcp --channel. The answer, if any,
 // comes back as an ordinary msg on the same topic. The phone resends a say
 // until it hears back, so the computer answers a repeated id without passing
-// the text on again.
+// the text on again. When nothing listens, the computer keeps the say for an
+// hour, for a Claude Code hook that runs pearbell inbox.
 import b4a from 'b4a'
 import z32 from 'z32'
 

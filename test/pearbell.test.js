@@ -309,14 +309,16 @@ test('say reaches a listener on the topic and the phone hears how many', async (
   t.is(msg.to[0].heard, null)
 
   await waitFor(() => said.length === 1)
-  t.alike(said[0], { type: 'said', id: msg.id, topic: 'builds', text: 'How is it going?', device: 'pixel' })
+  const { at, ...rest } = said[0]
+  t.alike(rest, { type: 'said', id: msg.id, topic: 'builds', text: 'How is it going?', device: 'pixel' })
+  t.ok(at > 0)
 
   await waitFor(() => phone.findMessage(msg.id).to[0].heard === 1)
   t.ok(events.some((e) => e.type === 'updated' && e.message.id === msg.id && e.message.to[0].heard === 1))
   t.absent(events.some((e) => e.type === 'message' && e.message.mine), 'no notification for your own message')
 })
 
-test('say with nobody listening comes back as 0', async (t) => {
+test('say with nobody listening waits, and the phone hears when a session takes it', async (t) => {
   const { daemon, phone, device } = await setup(t)
 
   const entry = daemon.send({ message: { title: '', topic: 'kody', body: 'hi', actions: [], wantsReply: false }, targets: [device] })
@@ -325,7 +327,11 @@ test('say with nobody listening comes back as 0', async (t) => {
 
   const msg = phone.say('kody', 'Status?')
   await waitFor(() => phone.findMessage(msg.id).to[0].heard === 0)
-  t.pass('nobody listening')
+  t.ok(phone.findMessage(msg.id).to[0].queued, 'waits in the inbox')
+
+  t.is(daemon.takeInbox('kody').length, 1)
+  await waitFor(() => phone.findMessage(msg.id).to[0].heard === 1)
+  t.absent(phone.findMessage(msg.id).to[0].queued, 'a session took it')
 })
 
 test('say waits for the computer and goes out on reconnect', async (t) => {
@@ -358,7 +364,57 @@ test('a repeated say is not passed on twice', async (t) => {
   daemon._onsay(device, conn, { type: 'say', id: 's2', topic: '', text: 'x' })
 
   t.is(said.length, 2, 'both listeners, once')
-  t.alike(frames, [{ type: 'heard', id: 's1', listeners: 2 }, { type: 'heard', id: 's1', listeners: 2 }])
+  t.alike(frames, [{ type: 'heard', id: 's1', listeners: 2, queued: false }, { type: 'heard', id: 's1', listeners: 2, queued: false }])
+})
+
+test('a say nobody listens to waits in the inbox until a session takes it', async (t) => {
+  const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
+  const device = { publicKey: 'ab', name: 'pixel' }
+  const frames = []
+  const conn = { destroyed: false, write: (buf) => frames.push(JSON.parse(buf.toString())) }
+  daemon.conns.set('ab', conn)
+
+  daemon._onsay(device, conn, { type: 'say', id: 's1', topic: 'ci', text: 'Status?' })
+  t.alike(frames.pop(), { type: 'heard', id: 's1', listeners: 0, queued: true })
+  t.alike(daemon.takeInbox('other'), [])
+
+  const taken = daemon.takeInbox('ci')
+  t.is(taken.length, 1)
+  t.is(taken[0].text, 'Status?')
+  t.is(taken[0].device, 'pixel')
+  t.absent('from' in taken[0], 'the phone key stays inside')
+  t.alike(frames.pop(), { type: 'heard', id: 's1', listeners: 1 }, 'the phone hears a session took it')
+  t.alike(daemon.takeInbox('ci'), [], 'taken once')
+
+  daemon._onsay(device, conn, { type: 'say', id: 's1', topic: 'ci', text: 'Status?' })
+  t.alike(frames.pop(), { type: 'heard', id: 's1', listeners: 1, queued: false }, 'a resend after that says heard')
+  t.alike(daemon.takeInbox('ci'), [])
+})
+
+test('the menu bar app hears when a session takes what it queued', async (t) => {
+  const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
+  const frames = []
+  const conn = { destroyed: false, write: (buf) => frames.push(JSON.parse(buf.toString())) }
+  daemon.mac = { conn, presence: {} }
+  daemon.onMacFrame(conn, { type: 'say', id: 'm1', topic: 'ci', text: 'Status?' })
+  t.alike(frames.pop(), { type: 'heard', id: 'm1', listeners: 0, queued: true })
+  t.is(daemon.takeInbox('ci')[0].device, 'this Mac')
+  t.alike(frames.pop(), { type: 'heard', id: 'm1', listeners: 1 })
+})
+
+test('a new listener gets what waited in the inbox; old ones expire', async (t) => {
+  const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
+  const device = { publicKey: 'ab', name: 'pixel' }
+  const conn = { destroyed: false, write: () => {} }
+
+  daemon._onsay(device, conn, { type: 'say', id: 'old', topic: 'ci', text: 'Old' })
+  daemon.inbox.get('ci')[0].at -= 2 * 60 * 60 * 1000
+  daemon._onsay(device, conn, { type: 'say', id: 'new', topic: 'ci', text: 'New' })
+
+  const said = []
+  daemon.listen(['ci'], (f) => said.push(f))
+  t.alike(said.map((f) => f.id), ['new'])
+  t.alike(daemon.takeInbox('ci'), [])
 })
 
 function once (emitter, name) {
