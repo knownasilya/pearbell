@@ -7,6 +7,8 @@
 //   daemon -> app  { type: 'state', computer, devices }
 //   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, key?, update?, notify, route, sentAt }
 //   app -> daemon  { type: 'ack', id }  or  { type: 'reply', id, text }
+//   app -> daemon  { type: 'say', id, topic, text }   the user wrote to a topic
+//   daemon -> app  { type: 'heard', id, listeners }   as for the phone (shared/protocol.js)
 //   daemon -> app  { type: 'routed', id, to, reason }   a question moved on to the phone
 //   daemon -> app  { type: 'closed', id, answer?, device? }
 //   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open

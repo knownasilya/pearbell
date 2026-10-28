@@ -360,6 +360,8 @@ From the phone you can write to a topic that a computer has sent messages under,
 
 What you write shows in the inbox as your own message, with what came of it: **Heard by 1 session**, **Waiting for** a computer that is offline (it goes out when the phone reconnects), or **Nobody listening**. The answer comes back as a normal message on the same topic.
 
+The [menu bar app](macos/README.md) on the Mac has the same chips, list and ask bar, for the sessions on that Mac.
+
 On the computer, a session hears its topic when `pearbell mcp` runs as a [Claude Code channel](https://code.claude.com/docs/en/channels). Add the server with `--channel`:
 
 ```bash
