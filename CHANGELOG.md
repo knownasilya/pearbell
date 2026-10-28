@@ -2,6 +2,20 @@
 
 ## Release (2026-10-28)
 
+* pearbell 0.15.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#27](https://github.com/knownasilya/pearbell/pull/27) Ask from a drawer on Android, and ask about a message from its card ([@knownasilya](https://github.com/knownasilya))
+  * [#24](https://github.com/knownasilya/pearbell/pull/24) Answer the phone from Claude Code hooks, without the channel flag ([@knownasilya](https://github.com/knownasilya))
+  * [#23](https://github.com/knownasilya/pearbell/pull/23) Make Delete all on Android clearer: labeled menu item and confirmation ([@knownasilya](https://github.com/knownasilya))
+  * [#25](https://github.com/knownasilya/pearbell/pull/25) Mac app: one-line topic chips, a topics list, and asking a topic ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
+## Release (2026-10-28)
+
 * pearbell 0.14.0 (minor)
 
 #### :rocket: Enhancement
