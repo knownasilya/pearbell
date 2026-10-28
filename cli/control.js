@@ -11,6 +11,12 @@
 //   daemon -> app  { type: 'closed', id, answer?, device? }
 //   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open
 // key and update work as on the phone (see shared/protocol.js).
+//
+// pearbell mcp --channel and pearbell listen keep one open too, to hear what
+// the user writes to a topic on the phone:
+//   cli -> daemon  { type: 'listen', topics }
+//   daemon -> cli  { type: 'listening', topics }
+//   daemon -> cli  { type: 'said', id, topic, text, device }
 // notify says whether the app shows a notification; otherwise it only keeps
 // the message in its inbox, because the phone got it.
 import { spawn } from 'node:child_process'
@@ -109,6 +115,18 @@ function handle (daemon, sock, req) {
       (device) => { reply({ type: 'paired', device }); sock.end() },
       (err) => { reply({ type: 'error', error: err.message, code: err.code }); sock.end() }
     )
+  } else if (req.type === 'listen') {
+    const topics = Array.isArray(req.topics)
+      ? [...new Set(req.topics.map((t) => String(t).trim().slice(0, 40)).filter(Boolean))].slice(0, 20)
+      : []
+    if (!topics.length) {
+      reply({ type: 'error', error: 'Listen to at least one topic' })
+      sock.end()
+      return
+    }
+    const stop = daemon.listen(topics, reply)
+    sock.once('close', stop)
+    reply({ type: 'listening', topics })
   } else if (req.type === 'send') {
     const targets = config.findDevices({ devices: daemon.devices }, req.device)
     const error = badKey(req.message?.key, req.message?.update === true) || noTarget(daemon, targets, req.device)
@@ -208,6 +226,17 @@ export function request (sock, req, onframe) {
     sock.once('close', resolve)
     writeJSON(sock, req)
   })
+}
+
+// Hear what the user writes to these topics on the phone, until the daemon
+// hangs up or signal aborts. onframe sees the 'listening', 'said' and 'error'
+// frames.
+export async function listen ({ topics, onframe = noop, signal, start = true }) {
+  const sock = await connect({ start })
+  const abort = () => sock.end()
+  signal?.addEventListener('abort', abort)
+  await request(sock, { type: 'listen', topics }, onframe)
+  signal?.removeEventListener('abort', abort)
 }
 
 // Send a message through the daemon (starting it if needed) and wait until

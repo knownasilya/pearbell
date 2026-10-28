@@ -9,6 +9,10 @@ import org.json.JSONObject
 
 data class Peer(val publicKey: String, val name: String, val pairedAt: Long, val connected: Boolean)
 
+// A computer the user wrote to, and how many listeners there heard it: null
+// while it has not answered yet, 0 when nothing listens on the topic.
+data class Recipient(val publicKey: String, val name: String, val heard: Int?)
+
 data class Message(
   val id: String,
   val from: String,
@@ -27,6 +31,9 @@ data class Message(
   val key: String? = null,
   val updatedAt: Long? = null,
   val updates: Int = 0,
+  // Written on this phone to a topic (Hub.say), not received.
+  val mine: Boolean = false,
+  val to: List<Recipient> = emptyList(),
 ) {
   val open get() = wantsReply && answer == null && !closed
 }
@@ -89,6 +96,9 @@ object Hub {
 
   fun answer(id: String, text: String) = command("answer", "id" to id, "text" to text)
 
+  // Write to whatever listens on a topic on the computers that use it.
+  fun say(topic: String, text: String) = command("say", "topic" to topic, "text" to text)
+
   fun unpair(publicKey: String) = command("unpair", "publicKey" to publicKey)
 
   fun clear() = command("clear")
@@ -125,6 +135,7 @@ object Hub {
 
   fun parseMessage(o: JSONObject): Message {
     val actions = o.optJSONArray("actions")
+    val to = o.optJSONArray("to")
     return Message(
       id = o.getString("id"),
       from = o.optString("from"),
@@ -142,6 +153,11 @@ object Hub {
       key = if (o.isNull("key") || !o.has("key")) null else o.optString("key"),
       updatedAt = if (o.isNull("updatedAt") || !o.has("updatedAt")) null else o.optLong("updatedAt"),
       updates = o.optInt("updates"),
+      mine = o.optBoolean("mine"),
+      to = if (to == null) emptyList() else (0 until to.length()).map {
+        val r = to.getJSONObject(it)
+        Recipient(r.getString("publicKey"), pretty(r.optString("name")), if (r.isNull("heard") || !r.has("heard")) null else r.optInt("heard"))
+      },
     )
   }
 }

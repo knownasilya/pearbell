@@ -3,7 +3,7 @@
 // phone core and talks to the Kotlin side over Bare Kit IPC with
 // newline-delimited JSON.
 //
-// Kotlin -> worklet: init, pair, answer, unpair, clear, archive, delete, undelete,
+// Kotlin -> worklet: init, pair, answer, say, unpair, clear, archive, delete, undelete,
 // delete-all, undelete-all, rename
 // worklet -> Kotlin: ready, state, message, updated, edited, paired, pair-error, error
 // (edited: the sender changed a message with an update, see shared/protocol.js)
@@ -38,6 +38,7 @@ async function oncommand (cmd) {
       }
       return
     case 'answer': return phone.answer(cmd.id, cmd.text)
+    case 'say': return phone.say(cmd.topic, cmd.text)
     case 'unpair': return phone.unpair(cmd.publicKey)
     case 'clear': return phone.clear()
     case 'archive': return phone.archive(cmd.id, cmd.archived !== false)
