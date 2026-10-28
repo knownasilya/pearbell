@@ -2,21 +2,17 @@
   "solution": {
     "pearbell": {
       "impact": "minor",
-      "oldVersion": "0.12.0",
-      "newVersion": "0.13.0",
+      "oldVersion": "0.13.0",
+      "newVersion": "0.14.0",
       "tagName": "latest",
       "constraints": [
         {
           "impact": "minor",
           "reason": "Appears in changelog section :rocket: Enhancement"
-        },
-        {
-          "impact": "patch",
-          "reason": "Appears in changelog section :memo: Documentation"
         }
       ],
       "pkgJSONPath": "./package.json"
     }
   },
-  "description": "## Release (2026-10-28)\n\n* pearbell 0.13.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#20](https://github.com/knownasilya/pearbell/pull/20) Render Markdown tables, code blocks and images in messages ([@knownasilya](https://github.com/knownasilya))\n  * [#19](https://github.com/knownasilya/pearbell/pull/19) Add Clear all to the Android inbox and archive ([@knownasilya](https://github.com/knownasilya))\n\n#### :memo: Documentation\n* `pearbell`\n  * [#17](https://github.com/knownasilya/pearbell/pull/17) Suggest full-reply, per-project-topic Claude Code hooks ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
+  "description": "## Release (2026-10-28)\n\n* pearbell 0.14.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#21](https://github.com/knownasilya/pearbell/pull/21) Ask a topic from the phone; one-line topic chips with a topics list ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
 }
