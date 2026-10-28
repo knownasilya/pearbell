@@ -6,6 +6,12 @@ struct PopoverView: View {
   @EnvironmentObject var model: AppModel
   @State private var showSettings = false
   @State private var showArchive = false
+  @State private var showTopics = false
+
+  // The ask bar shows under the inbox while it shows one topic.
+  private var asking: Bool {
+    !showSettings && !showArchive && !showTopics && model.focused == nil && model.topic != nil
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -13,8 +19,10 @@ struct PopoverView: View {
         SettingsView(close: { showSettings = false })
       } else if let id = model.focused, let message = model.messages.first(where: { $0.id == id }) {
         MessageDetail(message: message)
+      } else if showTopics {
+        TopicsView(canAsk: !showArchive, close: { showTopics = false })
       } else if showArchive {
-        ArchiveView(close: { showArchive = false })
+        ArchiveView(close: { showArchive = false }, showTopics: { showTopics = true })
       } else {
         header
         ScrollView {
@@ -55,10 +63,13 @@ struct PopoverView: View {
           .padding(.horizontal, 16)
           .padding(.bottom, 16)
         }
+        if let topic = model.topic {
+          AskBar(topic: topic)
+        }
       }
     }
     .frame(width: 380, height: 580)
-    .overlay(alignment: .bottom) { NoticeBar() }
+    .overlay(alignment: .bottom) { NoticeBar().padding(.bottom, asking ? 96 : 0) }
     .animation(.easeOut(duration: 0.2), value: model.notice)
     .background(Palette.background)
     .foregroundStyle(Palette.onSurface)
@@ -77,7 +88,7 @@ struct PopoverView: View {
       }
       StatusPill()
       RouteLine()
-      TopicChips()
+      TopicChips(onMore: { showTopics = true })
     }
     .padding(.horizontal, 20)
     .padding(.top, 16)
@@ -286,6 +297,56 @@ struct MessageRow: View {
   }
 
   var body: some View {
+    content
+    .offset(x: offset)
+    .background(SwipeBackground(offset: offset, archived: message.archived))
+    .clipped()
+    .gesture(swipe)
+    .contextMenu {
+      Button("Copy text") {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(message.body, forType: .string)
+      }
+      Button(message.archived ? "Move to the inbox" : "Archive") { model.archive(message.id, !message.archived) }
+      Button("Delete", role: .destructive) { model.delete(message.id) }
+    }
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    if message.mine { mine } else { received }
+  }
+
+  // Something you wrote to a topic: on the right, in the accent color.
+  private var mine: some View {
+    let status = heardStatus(message, connected: model.link == .connected)
+    return VStack(alignment: .trailing, spacing: 3) {
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Text("You")
+          .font(.system(size: 13, weight: .semibold))
+        TopicTag(topic: message.topic)
+        Text(messageTime(message))
+          .font(.system(size: 11, weight: .medium))
+          .foregroundStyle(Palette.onSurfaceVariant)
+      }
+      Text(message.body)
+        .font(.system(size: 13))
+        .multilineTextAlignment(.trailing)
+        .lineLimit(3)
+      Label(status.text, systemImage: status.heard ? "checkmark" : "ellipsis")
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(status.heard ? Palette.primary : Palette.outline)
+        .padding(.top, 3)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, alignment: .trailing)
+    .background(Palette.primaryContainer)
+    .contentShape(Rectangle())
+    .onTapGesture { model.focused = message.id }
+  }
+
+  private var received: some View {
     HStack(alignment: .top, spacing: 12) {
       Avatar(name: message.sender, size: 36)
       VStack(alignment: .leading, spacing: 3) {
@@ -328,18 +389,6 @@ struct MessageRow: View {
     .background(Palette.surfaceLow)
     .contentShape(Rectangle())
     .onTapGesture { model.focused = message.id }
-    .offset(x: offset)
-    .background(SwipeBackground(offset: offset, archived: message.archived))
-    .clipped()
-    .gesture(swipe)
-    .contextMenu {
-      Button("Copy text") {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(message.body, forType: .string)
-      }
-      Button(message.archived ? "Move to the inbox" : "Archive") { model.archive(message.id, !message.archived) }
-      Button("Delete", role: .destructive) { model.delete(message.id) }
-    }
   }
 }
 
@@ -484,6 +533,14 @@ struct MessageDetail: View {
             }
           }
 
+          if message.mine {
+            let status = heardStatus(message, connected: model.link == .connected)
+            Label("Written to a topic on this Mac · \(status.text)", systemImage: status.heard ? "checkmark" : "ellipsis")
+              .font(.system(size: 11, weight: .medium))
+              .foregroundStyle(status.heard ? Palette.primary : Palette.outline)
+              .padding(.top, 10)
+          }
+
           if message.route == "phone" || message.route == "both" {
             Label("Sent to your phone: \(message.reason)", systemImage: "iphone")
               .font(.system(size: 11))
@@ -552,26 +609,51 @@ struct SnoozeMenu: View {
   }
 }
 
-// "All" plus one chip per topic, like the phone. Hidden when no message has
-// a topic; picking one filters the inbox.
+// "All", then as many topics as fit on one line, then a chip that opens the
+// list of every topic (TopicsView), like the phone. The picked topic always
+// shows, right after "All". Hidden when no message has a topic.
 struct TopicChips: View {
   @EnvironmentObject var model: AppModel
+  let onMore: () -> Void
 
   var body: some View {
     let topics = model.topics
     if !topics.isEmpty {
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) {
-          chip("All", count: model.messages.count, selected: model.topic == nil) { model.topic = nil }
-          ForEach(topics, id: \.name) { topic in
-            chip(topic.name, count: topic.count, selected: model.topic == topic.name) {
-              model.topic = model.topic == topic.name ? nil : topic.name
-            }
-          }
+      let picked = topics.filter { $0.name == model.topic }
+      let ordered = picked + topics.filter { $0.name != model.topic }
+      // The longest row that fits wins, so the last chip says how many are left.
+      ViewThatFits(in: .horizontal) {
+        ForEach((0...ordered.count).reversed(), id: \.self) { shown in
+          row(Array(ordered.prefix(shown)), hidden: ordered.count - shown)
         }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.top, 2)
     }
+  }
+
+  private func row(_ shown: [AppModel.TopicInfo], hidden: Int) -> some View {
+    HStack(spacing: 8) {
+      chip("All", count: model.messages.count, selected: model.topic == nil) { model.topic = nil }
+      ForEach(shown, id: \.name) { topic in
+        chip(topic.name, count: topic.count, selected: model.topic == topic.name) {
+          model.topic = model.topic == topic.name ? nil : topic.name
+        }
+      }
+      Button(action: onMore) {
+        HStack(spacing: 5) {
+          Image(systemName: "list.bullet").font(.system(size: 10, weight: .bold))
+          Text(hidden > 0 ? "+\(hidden)" : "Topics").lineLimit(1)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Palette.surfaceContainer))
+      }
+      .buttonStyle(.plain)
+      .help("All topics")
+    }
+    .fixedSize()
   }
 
   private func chip(_ label: String, count: Int, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -580,7 +662,7 @@ struct TopicChips: View {
         if selected {
           Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
         }
-        Text(label).lineLimit(1).frame(maxWidth: 140)
+        Text(label).lineLimit(1).frame(maxWidth: 120)
         Text("\(count)").monospacedDigit().foregroundStyle(Palette.onSurfaceVariant)
       }
       .font(.system(size: 12, weight: .medium))
@@ -589,6 +671,171 @@ struct TopicChips: View {
       .background(Capsule().fill(selected ? Palette.primaryContainer : Palette.surfaceContainer))
     }
     .buttonStyle(.plain)
+  }
+}
+
+// Every topic with its message count and when its last message came. Click
+// one to see only it; Ask (in the inbox) writes to whatever listens on it.
+struct TopicsView: View {
+  @EnvironmentObject var model: AppModel
+  let canAsk: Bool
+  let close: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 10) {
+        IconButton(symbol: "chevron.left", label: "Back", action: close)
+          .keyboardShortcut(.cancelAction)
+        Text("Topics")
+          .font(.system(size: 22, weight: .semibold))
+        Spacer()
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 16)
+      .padding(.bottom, 8)
+
+      ScrollView {
+        VStack(spacing: 2) {
+          TopicRow(name: "All messages", detail: count(model.messages.count), picked: model.topic == nil, onAsk: nil) {
+            model.topic = nil
+            close()
+          }
+          ForEach(model.topics, id: \.name) { topic in
+            TopicRow(
+              name: topic.name,
+              detail: "\(count(topic.count)) · last \(lastTime(topic.lastAt))",
+              picked: model.topic == topic.name,
+              onAsk: canAsk ? {
+                model.topic = topic.name
+                model.askFocus += 1
+                close()
+              } : nil
+            ) {
+              model.topic = topic.name
+              close()
+            }
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+      }
+    }
+  }
+
+  private func count(_ n: Int) -> String { n == 1 ? "1 message" : "\(n) messages" }
+
+  private func lastTime(_ date: Date) -> String {
+    Date().timeIntervalSince(date) < 60 ? "just now" : RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+  }
+}
+
+private struct TopicRow: View {
+  let name: String
+  let detail: String
+  let picked: Bool
+  let onAsk: (() -> Void)?
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(name)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(picked ? Palette.primary : Palette.onSurface)
+          .lineLimit(1)
+        Text(detail)
+          .font(.system(size: 11))
+          .foregroundStyle(Palette.onSurfaceVariant)
+          .lineLimit(1)
+      }
+      Spacer()
+      if picked {
+        Image(systemName: "checkmark")
+          .font(.system(size: 12, weight: .bold))
+          .foregroundStyle(Palette.primary)
+          .accessibilityLabel("Showing")
+      }
+      if let onAsk {
+        Button("Ask", action: onAsk)
+          .buttonStyle(.plain)
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(Palette.primary)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .help("Ask \(name)")
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Palette.surfaceLow)
+    .contentShape(Rectangle())
+    .onTapGesture(perform: action)
+  }
+}
+
+// Under the inbox while it shows one topic: write to whatever listens on it,
+// such as the Claude Code session working on it (pearbell mcp --channel).
+// The answer comes back as a message on the topic.
+struct AskBar: View {
+  @EnvironmentObject var model: AppModel
+  let topic: String
+  @State private var draft = ""
+  @FocusState private var focused: Bool
+
+  static let progress = "What's the status? What's done, what are you on now, and what's next?"
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Button("Progress?") { model.say(topic, AskBar.progress) }
+        .buttonStyle(PillButtonStyle(filled: false))
+        .help("Ask \(topic) for a status update")
+      HStack(spacing: 8) {
+        TextField("Ask \(topic)…", text: $draft)
+          .textFieldStyle(.plain)
+          .font(.system(size: 13))
+          .focused($focused)
+          .onSubmit(send)
+        Button(action: send) {
+          Image(systemName: "paperplane.fill")
+            .foregroundStyle(empty ? Palette.outline : Palette.primary)
+        }
+        .buttonStyle(.plain)
+        .disabled(empty)
+        .accessibilityLabel("Send")
+      }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 10)
+      .background(Capsule().fill(Palette.surfaceLowest))
+    }
+    .padding(.horizontal, 16)
+    .padding(.top, 10)
+    .padding(.bottom, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Palette.surfaceContainer)
+    .disabled(model.link != .connected)
+    .help(model.link == .connected ? "" : "The pearbell daemon is not running")
+    .onChange(of: model.askFocus) { _ in focused = true }
+    .onChange(of: topic) { _ in draft = "" }
+    .onAppear { if model.askFocus > 0 { focused = true } }
+  }
+
+  private var empty: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+  private func send() {
+    guard !empty else { return }
+    model.say(topic, draft)
+    draft = ""
+  }
+}
+
+// What came of a message you wrote to a topic. The flag says someone heard it.
+func heardStatus(_ message: Message, connected: Bool) -> (text: String, heard: Bool) {
+  switch message.heard {
+  case nil: return (connected ? "Sending…" : "Waiting for the daemon", false)
+  case let n? where n > 0: return ("Heard by \(n) \(n == 1 ? "session" : "sessions")", true)
+  default: return (message.queued ? "Queued for Claude's next step" : "Nobody listening on this Mac", false)
   }
 }
 
@@ -656,6 +903,7 @@ struct SwipeBackground: View {
 struct ArchiveView: View {
   @EnvironmentObject var model: AppModel
   let close: () -> Void
+  let showTopics: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -667,7 +915,7 @@ struct ArchiveView: View {
             .font(.system(size: 22, weight: .semibold))
           Spacer()
         }
-        TopicChips()
+        TopicChips(onMore: showTopics)
       }
       .padding(.horizontal, 16)
       .padding(.top, 16)

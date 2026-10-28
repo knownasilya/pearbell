@@ -26,6 +26,8 @@ struct Frame: Decodable {
   let computer: String?
   let devices: [Device]?
   let open: [String]?
+  let listeners: Int?
+  let queued: Bool?
   let error: String?
 }
 
@@ -54,14 +56,21 @@ struct Message: Codable, Identifiable, Equatable {
   var key: String? = nil
   var updatedAt: Date? = nil
   var updates = 0
+  // Written here to a topic (AppModel.say), not received. heard is how many
+  // listeners got it: nil until the daemon answers, 0 for nobody. queued says
+  // the daemon keeps it for a Claude Code hook to take.
+  var mine = false
+  var heard: Int? = nil
+  var queued = false
 
-  var sender: String { title.isEmpty ? "pearbell" : title }
+  var sender: String { mine ? "You" : title.isEmpty ? "pearbell" : title }
   // An open question in the inbox. An archived one stays open but out of the way.
   var waiting: Bool { wantsReply && answer == nil && !closed && !archived }
 }
 
 extension Message {
-  // Inboxes saved before archiving have no "archived", and before updates no "key".
+  // Inboxes saved before archiving have no "archived", before updates no "key",
+  // and before asking a topic no "mine".
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(String.self, forKey: .id)
@@ -80,6 +89,9 @@ extension Message {
     key = try c.decodeIfPresent(String.self, forKey: .key)
     updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     updates = try c.decodeIfPresent(Int.self, forKey: .updates) ?? 0
+    mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
+    heard = try c.decodeIfPresent(Int.self, forKey: .heard)
+    queued = try c.decodeIfPresent(Bool.self, forKey: .queued) ?? false
   }
 }
 
