@@ -58,7 +58,7 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
         IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), contentDescription = "Back") }
         Spacer(Modifier.width(4.dp))
         Text("Archive", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-        if (archived.isNotEmpty()) ClearAllButton { actions.deleteAll(archived) }
+        MoreMenu(archived.size, "archive", topic) { actions.deleteAll(archived) }
       }
       TopicChips(topics, inArchive.size, topic, onSelect = { picked = it }, onMore = { allTopics = true })
 
