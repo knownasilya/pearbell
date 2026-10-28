@@ -361,6 +361,8 @@ From the phone you can write to a topic that a computer has sent messages under,
 
 What you write shows in the inbox as your own message, with what came of it: **Heard by 1 session**, **Queued** for Claude's next step (see hooks below), **Waiting for** a computer that is offline (it goes out when the phone reconnects), or **Nobody listening**. The answer comes back as a normal message on the same topic.
 
+The [menu bar app](macos/README.md) on the Mac has the same chips, list and ask bar, for the sessions on that Mac.
+
 A session on the computer can pick it up in two ways. Both use the project folder's name as the topic, like the [hooks](#claude-code-hooks) below.
 
 **With hooks (no flags).** When nothing listens on the topic, the daemon keeps what you write for an hour, and `pearbell inbox --hook` hands it to Claude from a hook. Add these to the `hooks` in `~/.claude/settings.json`, next to the ones below:

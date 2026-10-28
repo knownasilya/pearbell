@@ -36,6 +36,8 @@ final class AppModel: ObservableObject {
   @Published var focused: String?
   // The topic the inbox shows, or nil for all.
   @Published var topic: String?
+  // Bumped to put the cursor in the ask bar (Ask in the topics list).
+  @Published var askFocus = 0
   // Why new messages go to the phone right now, or nil when they come here.
   @Published private(set) var away: String?
   @Published var startError: String?
@@ -64,10 +66,16 @@ final class AppModel: ObservableObject {
   private var trash: [(message: Message, index: Int)] = []
   private var noticeTimer: Timer?
 
+  struct TopicInfo: Equatable {
+    let name: String
+    let count: Int
+    let lastAt: Date
+  }
+
   // Topics in the inbox, most used first, like the phone.
-  var topics: [(name: String, count: Int)] {
-    Dictionary(grouping: messages.map(\.topic).filter { !$0.isEmpty }, by: { $0 })
-      .map { (name: $0.key, count: $0.value.count) }
+  var topics: [TopicInfo] {
+    Dictionary(grouping: messages.filter { !$0.topic.isEmpty }, by: \.topic)
+      .map { TopicInfo(name: $0.key, count: $0.value.count, lastAt: $0.value.map(\.receivedAt).max() ?? .distantPast) }
       .sorted { $0.count != $1.count ? $0.count > $1.count : $0.name.lowercased() < $1.name.lowercased() }
   }
 
@@ -98,6 +106,7 @@ final class AppModel: ObservableObject {
       // would still redraw the popover.
       let next: Link = up ? .connected : (self.link == .outdated ? .outdated : .offline)
       if self.link != next { self.link = next }
+      if up { self.resendSays() }
     }
     daemon.onError = { [weak self] _ in
       if self?.link != .outdated { self?.link = .outdated }
@@ -138,6 +147,44 @@ final class AppModel: ObservableObject {
     messages[i].answeredBy = nil
     notifier.clear(id)
     Inbox.save(messages)
+  }
+
+  // Write to whatever listens on a topic on this Mac, such as the Claude Code
+  // session working on it (pearbell mcp --channel). It shows in the inbox as
+  // your own message; the answer comes back as a message on the topic.
+  func say(_ topic: String, _ text: String) {
+    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !topic.isEmpty, !text.isEmpty, link == .connected else { return }
+    let message = Message(
+      id: (0..<8).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined(),
+      title: "",
+      body: String(text.prefix(4000)),
+      topic: topic,
+      actions: [],
+      wantsReply: false,
+      receivedAt: Date(),
+      route: "mac",
+      reason: "",
+      answer: nil,
+      answeredBy: nil,
+      closed: false,
+      mine: true
+    )
+    messages.insert(message, at: 0)
+    Inbox.save(messages)
+    daemon.send(sayFrame(message))
+  }
+
+  // What the daemon did not answer before the link dropped. It passes a
+  // repeated id on only once.
+  private func resendSays() {
+    for message in messages where message.mine && message.heard == nil && Date().timeIntervalSince(message.receivedAt) < 24 * 3600 {
+      daemon.send(sayFrame(message))
+    }
+  }
+
+  private func sayFrame(_ message: Message) -> [String: Any] {
+    ["type": "say", "id": message.id, "topic": message.topic, "text": message.body]
   }
 
   func snooze(until date: Date?) {
@@ -283,6 +330,12 @@ final class AppModel: ObservableObject {
         messages.sort { $0.receivedAt > $1.receivedAt }
         if frame.notify == true { notifier.show(message) }
       }
+      Inbox.save(messages)
+
+    case "heard":
+      guard let id = frame.id, let i = messages.firstIndex(where: { $0.id == id && $0.mine }) else { return }
+      messages[i].heard = max(frame.listeners ?? 0, 0)
+      messages[i].queued = frame.queued ?? false
       Inbox.save(messages)
 
     case "routed":

@@ -242,6 +242,25 @@ test('mac: the app gets the id and updates', async (t) => {
   t.is(mac.messages[1].body, '- [x] one')
 })
 
+test('mac: the app writes to a topic, and hears how many listened', async (t) => {
+  const { daemon } = await setup(t, { pair: false })
+  const mac = await connectMac(t)
+  const said = []
+  daemon.listen(['builds'], (f) => said.push(f))
+
+  writeJSON(mac.sock, { type: 'say', id: 'm1', topic: 'builds', text: ' Status? ' })
+  writeJSON(mac.sock, { type: 'say', id: 'm2', topic: 'kody', text: 'Status?' })
+  await waitFor(() => mac.frames.filter((f) => f.type === 'heard').length === 2)
+
+  const { at, ...rest } = said[0]
+  t.alike(rest, { type: 'said', id: 'm1', topic: 'builds', text: 'Status?', device: 'this Mac' })
+  t.ok(at > 0)
+  t.alike(mac.frames.filter((f) => f.type === 'heard'), [
+    { type: 'heard', id: 'm1', listeners: 1, queued: false },
+    { type: 'heard', id: 'm2', listeners: 0, queued: true }
+  ])
+})
+
 function once (emitter, name) {
   return new Promise((resolve) => emitter.once(name, resolve))
 }

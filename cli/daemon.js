@@ -208,12 +208,13 @@ export class Daemon extends EventEmitter {
     this._writeMac({ type: 'synced', open })
   }
 
-  // A frame from the menu bar app: presence, ack or reply.
+  // A frame from the menu bar app: presence, ack, reply or say.
   onMacFrame (conn, frame) {
     if (!this.mac || this.mac.conn !== conn) return
     if (frame.type === 'presence') this.setPresence(frame)
     else if (frame.type === 'ack') this._onack(MAC_DEVICE, String(frame.id))
     else if (frame.type === 'reply') this._onreply(MAC_DEVICE, null, String(frame.id), frame.text)
+    else if (frame.type === 'say') this._onsay(MAC_DEVICE, conn, frame)
   }
 
   setPresence (p = {}) {
@@ -270,7 +271,8 @@ export class Daemon extends EventEmitter {
 
     for (const said of waiting) {
       this.heard.set(said.id, { listeners: 1, queued: false })
-      const conn = this.conns.get(said.from)
+      // The phone or the menu bar app that wrote it.
+      const conn = said.from === MAC ? this.mac?.conn : this.conns.get(said.from)
       if (conn) writeJSON(conn, { type: 'heard', id: said.id, listeners: 1 })
     }
     return waiting.map(({ from, ...said }) => said)
@@ -416,7 +418,8 @@ export class Daemon extends EventEmitter {
     this.close(id, answer)
   }
 
-  // The user wrote to a topic on the phone: pass it to whatever listens there.
+  // The user wrote to a topic on the phone or in the menu bar app: pass it to
+  // whatever listens there.
   _onsay (device, conn, frame) {
     const id = typeof frame.id === 'string' && frame.id.length <= 64 ? frame.id : ''
     const topic = typeof frame.topic === 'string' ? frame.topic.trim().slice(0, 40) : ''

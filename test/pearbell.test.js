@@ -391,6 +391,17 @@ test('a say nobody listens to waits in the inbox until a session takes it', asyn
   t.alike(daemon.takeInbox('ci'), [])
 })
 
+test('the menu bar app hears when a session takes what it queued', async (t) => {
+  const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
+  const frames = []
+  const conn = { destroyed: false, write: (buf) => frames.push(JSON.parse(buf.toString())) }
+  daemon.mac = { conn, presence: {} }
+  daemon.onMacFrame(conn, { type: 'say', id: 'm1', topic: 'ci', text: 'Status?' })
+  t.alike(frames.pop(), { type: 'heard', id: 'm1', listeners: 0, queued: true })
+  t.is(daemon.takeInbox('ci')[0].device, 'this Mac')
+  t.alike(frames.pop(), { type: 'heard', id: 'm1', listeners: 1 })
+})
+
 test('a new listener gets what waited in the inbox; old ones expire', async (t) => {
   const daemon = new Daemon({ dht: null, keyPair: DHT.keyPair(), name: 'laptop' })
   const device = { publicKey: 'ab', name: 'pixel' }
