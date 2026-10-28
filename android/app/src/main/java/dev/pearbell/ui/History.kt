@@ -58,7 +58,7 @@ import java.text.DateFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-// Archive, unarchive and delete, each with an Undo bar.
+// Archive, unarchive, delete and clear all, each with an Undo bar.
 class MessageActions(
   private val context: Context,
   private val scope: CoroutineScope,
@@ -74,6 +74,13 @@ class MessageActions(
     Notifier.cancel(context, msg.id)
     Hub.delete(msg.id)
     undo("Deleted") { Hub.undelete(msg.id) }
+  }
+
+  fun deleteAll(msgs: List<Message>) {
+    if (msgs.isEmpty()) return
+    msgs.forEach { Notifier.cancel(context, it.id) }
+    Hub.deleteAll(msgs.map { it.id })
+    undo(if (msgs.size == 1) "Deleted 1 message" else "Deleted ${msgs.size} messages") { Hub.undeleteAll() }
   }
 
   private fun undo(text: String, revert: () -> Unit) {

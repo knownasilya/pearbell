@@ -56,7 +56,8 @@ fun ArchiveScreen(all: List<Message>, onBack: () -> Unit) = ProvideNow {
       Row(Modifier.padding(start = 8.dp, top = 8.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), contentDescription = "Back") }
         Spacer(Modifier.width(4.dp))
-        Text("Archive", style = MaterialTheme.typography.headlineMedium)
+        Text("Archive", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+        if (archived.isNotEmpty()) ClearAllButton { actions.deleteAll(archived) }
       }
       TopicChips(topics, inArchive.size, topic) { picked = it }
 

@@ -99,6 +99,10 @@ object Hub {
 
   fun undelete(id: String) = command("undelete", "id" to id)
 
+  fun deleteAll(ids: List<String>) = command("delete-all", "ids" to JSONArray(ids))
+
+  fun undeleteAll() = command("undelete-all")
+
   fun applyState(event: JSONObject) {
     event.optJSONArray("peers")?.let { peers.value = parsePeers(it) }
     event.optJSONArray("messages")?.let { arr ->

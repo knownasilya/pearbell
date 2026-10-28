@@ -122,6 +122,12 @@ private fun Inbox(
       Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text("Inbox", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
+          // Clears what is in view (one topic, if picked). Questions still
+          // waiting for an answer stay; the computer is waiting on them.
+          if (rest.isNotEmpty()) {
+            ClearAllButton { actions.deleteAll(rest) }
+            Spacer(Modifier.width(4.dp))
+          }
           FilledTonalIconButton(onClick = onArchive) {
             Icon(painterResource(R.drawable.ic_archive), contentDescription = "Archive", modifier = Modifier.size(20.dp))
           }
@@ -178,6 +184,13 @@ private fun Inbox(
 
   details?.let { id -> all.find { it.id == id } }?.let { msg ->
     MessageDetails(msg, actions) { details = null }
+  }
+}
+
+@Composable
+internal fun ClearAllButton(onClick: () -> Unit) {
+  FilledTonalIconButton(onClick = onClick) {
+    Icon(painterResource(R.drawable.ic_clear_all), contentDescription = "Clear all", modifier = Modifier.size(20.dp))
   }
 }
 

@@ -175,6 +175,27 @@ test('archive, delete and undo', async (t) => {
   t.absent(phone.undelete(id), 'undo works once')
 })
 
+test('clear all and undo', async (t) => {
+  const { daemon, phone, device } = await setup(t)
+
+  const ids = []
+  for (const body of ['one', 'two', 'three']) {
+    const entry = daemon.send({ message: { body, actions: [], wantsReply: false }, targets: [device] })
+    await once(entry, 'delivered')
+    ids.push(entry.id)
+  }
+
+  t.is(phone.deleteAll([ids[0], ids[1], 'nope']), 2)
+  t.absent(phone.findMessage(ids[0]))
+  t.absent(phone.findMessage(ids[1]))
+  t.is(phone.findMessage(ids[2]).body, 'three', 'the rest stays')
+
+  t.is(phone.undeleteAll(), 2)
+  t.alike(phone.state.messages.map((m) => m.body), ['three', 'two', 'one'], 'back in order')
+  t.is(phone.undeleteAll(), 0, 'undo works once')
+  t.is(phone.deleteAll([]), 0)
+})
+
 test('the computer picks up a renamed phone', async (t) => {
   const { daemon, phone, device } = await setup(t)
 
