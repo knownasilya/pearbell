@@ -133,7 +133,8 @@ fun TopicsSheet(
           TopicRow("All messages", "$total ${plural(total)}", selected == null, null) { onSelect(null); onDismiss() }
         }
         items(topics, key = { it.name }) { t ->
-          val last = DateUtils.getRelativeTimeSpanString(t.lastAt, now, DateUtils.MINUTE_IN_MILLIS)
+          val last = if (now - t.lastAt < DateUtils.MINUTE_IN_MILLIS) "just now"
+            else DateUtils.getRelativeTimeSpanString(t.lastAt, now, DateUtils.MINUTE_IN_MILLIS)
           TopicRow(
             t.name,
             "${t.count} ${plural(t.count)} · last $last",
