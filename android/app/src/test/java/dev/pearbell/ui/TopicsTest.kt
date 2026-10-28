@@ -33,5 +33,7 @@ class TopicsTest {
     assertEquals("Heard by 1 session", status(1))
     assertEquals("Heard by 2 sessions, waiting for pc1", status(2, null))
     assertEquals("Nobody listening on pc0, pc1", status(0, 0))
+    val queued = msg("m", "t", mine = true, to = listOf(Recipient("k", "laptop", 0, queued = true)))
+    assertEquals("Queued on laptop for Claude's next step", heardStatus(queued).first)
   }
 }

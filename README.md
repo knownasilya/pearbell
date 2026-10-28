@@ -188,6 +188,7 @@ pearbell start      # start the background daemon (any command does)
 pearbell stop       # stop the background daemon
 pearbell mcp        # MCP server for AI tools, see "Use it with AI tools"
 pearbell listen -T builds   # print what you write to "builds" on the phone
+pearbell inbox -T builds    # print (and take) what waited there
 ```
 
 | Option | Meaning |
@@ -358,9 +359,25 @@ Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.j
 
 From the phone you can write to a topic that a computer has sent messages under, and get an answer from the Claude Code session working on it. Pick the topic's chip in the inbox: a bar at the bottom says "Ask pearbell…", with a **Progress?** button that asks for a status update in one tap. Or open the list of topics and tap **Ask** next to one.
 
-What you write shows in the inbox as your own message, with what came of it: **Heard by 1 session**, **Waiting for** a computer that is offline (it goes out when the phone reconnects), or **Nobody listening**. The answer comes back as a normal message on the same topic.
+What you write shows in the inbox as your own message, with what came of it: **Heard by 1 session**, **Queued** for Claude's next step (see hooks below), **Waiting for** a computer that is offline (it goes out when the phone reconnects), or **Nobody listening**. The answer comes back as a normal message on the same topic.
 
-On the computer, a session hears its topic when `pearbell mcp` runs as a [Claude Code channel](https://code.claude.com/docs/en/channels). Add the server with `--channel`:
+A session on the computer can pick it up in two ways. Both use the project folder's name as the topic, like the [hooks](#claude-code-hooks) below.
+
+**With hooks (no flags).** When nothing listens on the topic, the daemon keeps what you write for an hour, and `pearbell inbox --hook` hands it to Claude from a hook. Add these to the `hooks` in `~/.claude/settings.json`, next to the ones below:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "pearbell inbox --hook" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "pearbell inbox --hook" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "pearbell inbox --hook" }] }]
+  }
+}
+```
+
+After each step Claude takes, it sees what you wrote and answers with the pearbell send tool (or `pearbell send`). If it was about to finish, the Stop hook keeps it going long enough to answer. The phone says **Queued** until a hook takes the message, then **Heard by 1 session**. A session that sits idle waiting for you at the terminal runs no hooks, so it answers when you next give it something to do. The hook prints nothing when nothing waits, and never starts the daemon.
+
+**As a channel (answers even when idle).** `pearbell mcp --channel` makes the MCP server a [Claude Code channel](https://code.claude.com/docs/en/channels), which can wake an idle session:
 
 ```bash
 claude mcp add --scope user pearbell -- pearbell mcp --channel
@@ -372,9 +389,9 @@ Channels are a research preview, so Claude Code only loads one that is not on it
 claude --dangerously-load-development-channels server:pearbell
 ```
 
-An alias saves typing: `alias claude='claude --dangerously-load-development-channels server:pearbell'`. The session listens on the project folder's name, the same topic the [hooks](#claude-code-hooks) below use. Pick another with `-T` or `$PEARBELL_TOPIC`. A message that comes while Claude is busy waits for its next turn. Start Claude without the flag and the phone still says **Heard**, but Claude Code drops the message.
+Pick another topic with `-T` or `$PEARBELL_TOPIC`. A message that comes while Claude is busy waits for its next turn. Start Claude without the flag and the phone still says **Heard**, but Claude Code drops the message.
 
-Anything else can listen too: `pearbell listen -T builds` prints each message (`--json` for one JSON object per line) until you stop it.
+Anything else can listen too: `pearbell listen -T builds` prints each message (`--json` for one JSON object per line) until you stop it, and `pearbell inbox -T builds` prints what is queued and takes it.
 
 ### Without MCP
 
@@ -398,7 +415,7 @@ npm run fake-phone           # listen; type a reply and press Enter, or "@topic 
 ### Layout
 
 - [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams.
-- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server, queue, topic listeners), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone), [mcp.js](cli/mcp.js) (MCP server and channel), [http.js](cli/http.js) (HTTP API).
+- [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server, queue, topic listeners), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone), [mcp.js](cli/mcp.js) (MCP server and channel), [hook.js](cli/hook.js) (`inbox --hook` output), [http.js](cli/http.js) (HTTP API).
 - [macos/](macos): the SwiftUI menu bar app. It talks to the daemon over the local socket.
 - [android/](android): Kotlin app. [app.js](android/app/src/main/js/app.js) is the Bare worklet entry, bundled with `bare-pack` and linked with `bare-link` during the Gradle build. [BellService.kt](android/app/src/main/java/dev/pearbell/BellService.kt) is a foreground service that keeps the worklet alive and talks to it over Bare Kit IPC.
 

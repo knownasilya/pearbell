@@ -59,7 +59,7 @@ function onevent (e) {
   }
   if (e.type === 'updated' && e.message.mine) {
     for (const t of e.message.to) {
-      if (t.heard !== null) console.log(`  ${t.name}: ${t.heard ? `heard by ${t.heard}` : 'nobody listening'}`)
+      if (t.heard !== null) console.log(`  ${t.name}: ${t.heard ? `heard by ${t.heard}` : t.queued ? 'queued for pearbell inbox' : 'nobody listening'}`)
     }
   }
   if (e.type === 'updated' && e.message.closed && e.message.answer === null) console.log(`  (${e.message.id} no longer waiting)`)

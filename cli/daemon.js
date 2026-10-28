@@ -13,6 +13,10 @@ import { awayReason, decide, idleSeconds, snoozeReason } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
 export const SEND_TTL = 24 * 60 * 60 * 1000
+// What the user writes to a topic nobody listens to waits this long, up to
+// INBOX_MAX per topic, for pearbell inbox.
+const INBOX_TTL = 60 * 60 * 1000
+const INBOX_MAX = 20
 
 // The menu bar app's place in a message's targets, next to phone keys.
 export const MAC = 'mac'
@@ -31,7 +35,8 @@ export class Daemon extends EventEmitter {
     this.pairing = null
     this.mac = null // { conn, presence } while the menu bar app is connected
     this.listeners = new Set() // { topics, write } for each listen on the local socket
-    this.heard = new Map() // say id -> listeners it reached, so a resend is not passed on twice
+    this.heard = new Map() // say id -> { listeners, queued }, so a resend is not passed on twice
+    this.inbox = new Map() // topic -> says nobody listened to yet, for pearbell inbox
   }
 
   async start () {
@@ -246,10 +251,29 @@ export class Daemon extends EventEmitter {
   // Hear what the user writes to these topics on a phone (pearbell mcp
   // --channel, pearbell listen). write gets { type: 'said', id, topic, text,
   // device }. Returns a function that stops listening.
+  // What waited in the inbox for these topics goes to the new listener first.
   listen (topics, write) {
     const listener = { topics: new Set(topics), write }
     this.listeners.add(listener)
+    for (const topic of topics) {
+      for (const said of this.takeInbox(topic)) write(said)
+    }
     return () => this.listeners.delete(listener)
+  }
+
+  // Take what the user wrote to a topic while nothing listened (pearbell inbox,
+  // from a Claude Code hook). The phone hears that a session got each one.
+  takeInbox (topic) {
+    const now = Date.now()
+    const waiting = (this.inbox.get(topic) || []).filter((s) => now - s.at < INBOX_TTL)
+    this.inbox.delete(topic)
+
+    for (const said of waiting) {
+      this.heard.set(said.id, { listeners: 1, queued: false })
+      const conn = this.conns.get(said.from)
+      if (conn) writeJSON(conn, { type: 'heard', id: said.id, listeners: 1 })
+    }
+    return waiting.map(({ from, ...said }) => said)
   }
 
   listening (topic) {
@@ -399,18 +423,24 @@ export class Daemon extends EventEmitter {
     const text = typeof frame.text === 'string' ? frame.text.trim().slice(0, MAX_SAY) : ''
     if (!id || !topic || !text) return
 
-    let listeners = this.heard.get(id)
-    if (listeners === undefined) {
-      const said = { type: 'said', id, topic, text, device: device.name }
+    let heard = this.heard.get(id)
+    if (heard === undefined) {
+      const said = { type: 'said', id, topic, text, device: device.name, at: Date.now() }
       const reached = this.listening(topic)
       for (const l of reached) l.write(said)
-      listeners = reached.length
 
-      this.heard.set(id, listeners)
+      // Nothing listens now: keep it for pearbell inbox (a Claude Code hook).
+      if (!reached.length) {
+        const waiting = (this.inbox.get(topic) || []).concat({ ...said, from: device.publicKey })
+        this.inbox.set(topic, waiting.slice(-INBOX_MAX))
+      }
+
+      heard = { listeners: reached.length, queued: !reached.length }
+      this.heard.set(id, heard)
       if (this.heard.size > 500) this.heard.delete(this.heard.keys().next().value)
-      this.emit('said', { ...said, listeners })
+      this.emit('said', { ...said, ...heard })
     }
-    writeJSON(conn, { type: 'heard', id, listeners })
+    writeJSON(conn, { type: 'heard', id, ...heard })
   }
 
   _onpair (conn, publicKey, frame) {

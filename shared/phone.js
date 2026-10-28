@@ -303,13 +303,15 @@ export class Phone {
     else if (frame.type === 'heard') this._onheard(link, frame)
   }
 
-  // The computer passed a say on to this many listeners.
+  // The computer passed a say on to this many listeners, or queued it for a
+  // session to take later (another heard follows then).
   _onheard (link, frame) {
     const msg = this.findMessage(frame.id)
     const to = msg?.mine ? msg.to.find((t) => t.publicKey === link.peer.publicKey) : null
     if (!to) return
 
     to.heard = Number.isInteger(frame.listeners) && frame.listeners > 0 ? frame.listeners : 0
+    to.queued = to.heard === 0 && frame.queued === true
     this.save()
     this.emit({ type: 'updated', message: msg })
   }
