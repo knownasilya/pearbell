@@ -1,5 +1,21 @@
 # Changelog
 
+## Release (2026-10-28)
+
+* pearbell 0.13.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#20](https://github.com/knownasilya/pearbell/pull/20) Render Markdown tables, code blocks and images in messages ([@knownasilya](https://github.com/knownasilya))
+  * [#19](https://github.com/knownasilya/pearbell/pull/19) Add Clear all to the Android inbox and archive ([@knownasilya](https://github.com/knownasilya))
+
+#### :memo: Documentation
+* `pearbell`
+  * [#17](https://github.com/knownasilya/pearbell/pull/17) Suggest full-reply, per-project-topic Claude Code hooks ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
 ## Release (2026-10-26)
 
 * pearbell 0.12.0 (minor)
