@@ -2,8 +2,8 @@
   "solution": {
     "pearbell": {
       "impact": "minor",
-      "oldVersion": "0.14.0",
-      "newVersion": "0.15.0",
+      "oldVersion": "0.15.0",
+      "newVersion": "0.16.0",
       "tagName": "latest",
       "constraints": [
         {
@@ -14,5 +14,5 @@
       "pkgJSONPath": "./package.json"
     }
   },
-  "description": "## Release (2026-10-28)\n\n* pearbell 0.15.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#27](https://github.com/knownasilya/pearbell/pull/27) Ask from a drawer on Android, and ask about a message from its card ([@knownasilya](https://github.com/knownasilya))\n  * [#24](https://github.com/knownasilya/pearbell/pull/24) Answer the phone from Claude Code hooks, without the channel flag ([@knownasilya](https://github.com/knownasilya))\n  * [#23](https://github.com/knownasilya/pearbell/pull/23) Make Delete all on Android clearer: labeled menu item and confirmation ([@knownasilya](https://github.com/knownasilya))\n  * [#25](https://github.com/knownasilya/pearbell/pull/25) Mac app: one-line topic chips, a topics list, and asking a topic ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
+  "description": "## Release (2026-10-29)\n\n* pearbell 0.16.0 (minor)\n\n#### :rocket: Enhancement\n* `pearbell`\n  * [#28](https://github.com/knownasilya/pearbell/pull/28) Rest hours: quiet at bedtime and on rest days, on the phone and the Mac ([@knownasilya](https://github.com/knownasilya))\n\n#### Committers: 1\n- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))\n"
 }

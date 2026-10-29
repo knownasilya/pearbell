@@ -1,5 +1,16 @@
 # Changelog
 
+## Release (2026-10-29)
+
+* pearbell 0.16.0 (minor)
+
+#### :rocket: Enhancement
+* `pearbell`
+  * [#28](https://github.com/knownasilya/pearbell/pull/28) Rest hours: quiet at bedtime and on rest days, on the phone and the Mac ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
 ## Release (2026-10-28)
 
 * pearbell 0.15.0 (minor)
