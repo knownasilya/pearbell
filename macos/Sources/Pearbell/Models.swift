@@ -17,6 +17,8 @@ struct Frame: Decodable {
   let key: String?
   let update: Bool?
   let notify: Bool?
+  let quiet: Bool?
+  let rest: Rest?
   let route: Route?
   let sentAt: Double?
   let to: String?
@@ -29,6 +31,34 @@ struct Frame: Decodable {
   let listeners: Int?
   let queued: Bool?
   let error: String?
+}
+
+// Rest hours (shared/rest.js): quiet nights from..until and rest days (0 is
+// Sunday), one setting for the Mac and the phones. The daemon decides whether
+// a message comes during them (Frame.quiet); the newest change wins.
+struct Rest: Codable, Equatable {
+  var on = false
+  var nightly = true
+  var from = "22:00"
+  var until = "07:00"
+  var days = [0]
+  var updatedAt: Double = 0
+
+  var frame: [String: Any] {
+    ["on": on, "nightly": nightly, "from": from, "until": until, "days": days.sorted(), "updatedAt": updatedAt]
+  }
+
+  // "HH:MM" as a time today, for the pickers.
+  static func date(_ time: String) -> Date {
+    let parts = time.split(separator: ":").compactMap { Int($0) }
+    let calendar = Calendar.current
+    return calendar.date(bySettingHour: parts.first ?? 0, minute: parts.count > 1 ? parts[1] : 0, second: 0, of: Date()) ?? Date()
+  }
+
+  static func time(_ date: Date) -> String {
+    let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+    return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+  }
 }
 
 struct Device: Decodable, Identifiable, Equatable {

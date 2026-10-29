@@ -18,6 +18,10 @@
 //   phone -> computer  { type: 'reply', id, text }
 //   computer -> phone  { type: 'closed', id }   nobody waits for a reply any more
 //   phone -> computer  { type: 'say', id, topic, text }   the user wrote to a topic
+//   phone <-> computer { type: 'rest', rest }   rest hours (shared/rest.js); each
+//                      side sends its own when it connects, and after a change.
+//                      The newer one (rest.updatedAt) wins; the side with the
+//                      newer one answers an older one with its own.
 //   computer -> phone  { type: 'heard', id, listeners, queued? }   how many listened
 //                      (0: nobody; queued: it waits for pearbell inbox, and
 //                      another heard follows when a session takes it)

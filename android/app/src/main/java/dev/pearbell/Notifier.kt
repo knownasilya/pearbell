@@ -12,6 +12,7 @@ import dev.pearbell.ui.Markdown
 object Notifier {
   const val SERVICE_ID = 1
   private const val CHANNEL_MESSAGES = "messages"
+  private const val CHANNEL_REST = "rest"
   private const val CHANNEL_SERVICE = "service"
   private const val CHANNEL_UPDATES = "updates"
   private const val UPDATE_ID = 2
@@ -23,6 +24,12 @@ object Notifier {
     nm.createNotificationChannel(
       NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
         description = "Messages from your paired computers"
+      }
+    )
+    // Rest hours: the same messages, in the shade without a sound or a banner.
+    nm.createNotificationChannel(
+      NotificationChannel(CHANNEL_REST, "Messages during rest hours", NotificationManager.IMPORTANCE_LOW).apply {
+        description = "Messages that arrive at night or on a rest day"
       }
     )
     nm.createNotificationChannel(
@@ -70,9 +77,10 @@ object Notifier {
     if (nm.activeNotifications.any { it.id == notificationId(msg.id) }) showMessage(context, msg, quiet = true)
   }
 
-  fun showMessage(context: Context, msg: Message, quiet: Boolean = false) {
+  // resting: it came during rest hours, so it goes in quietly.
+  fun showMessage(context: Context, msg: Message, quiet: Boolean = false, resting: Boolean = false) {
     val nm = context.getSystemService(NotificationManager::class.java)
-    val builder = Notification.Builder(context, CHANNEL_MESSAGES)
+    val builder = Notification.Builder(context, if (resting) CHANNEL_REST else CHANNEL_MESSAGES)
       .setSmallIcon(R.drawable.ic_bell)
       .setColor(ACCENT)
       .setContentTitle(msg.title.ifEmpty { msg.fromName })

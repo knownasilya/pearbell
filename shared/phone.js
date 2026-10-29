@@ -8,6 +8,7 @@ import DHT from 'hyperdht'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from './lines.js'
 import { MAX_SAY, cleanKey, clipBody, decodePairCode, opened, toHex, fromHex } from './protocol.js'
+import { cleanRest, resting } from './rest.js'
 
 const MAX_MESSAGES = 200
 const MAX_TOPIC = 40
@@ -23,7 +24,8 @@ export class Phone {
     this.state = {
       seed: state.seed || toHex(crypto.randomBytes(32)),
       peers: state.peers || [],
-      messages: state.messages || []
+      messages: state.messages || [],
+      rest: cleanRest(state.rest)
     }
     this.save = () => save(this.state)
     this.emit = emit
@@ -62,7 +64,7 @@ export class Phone {
 
   snapshot () {
     const peers = this.state.peers.map((p) => ({ ...p, connected: this.links.get(p.publicKey)?.connected || false }))
-    return { peers, messages: this.state.messages }
+    return { peers, messages: this.state.messages, rest: this.state.rest }
   }
 
   findPeer (publicKey) {
@@ -80,6 +82,15 @@ export class Phone {
     if (!clean || clean === this.name) return
     this.name = clean
     for (const link of this.links.values()) link.send({ type: 'name', name: clean })
+  }
+
+  // The user changed the rest hours on this phone (shared/rest.js). They go
+  // to every paired computer, which pass them on to the Mac and other phones.
+  setRest (rest) {
+    this.state.rest = cleanRest({ ...rest, updatedAt: Math.max(Date.now(), this.state.rest.updatedAt + 1) })
+    this.save()
+    this.emit({ type: 'rest', rest: this.state.rest })
+    for (const link of this.links.values()) link.send({ type: 'rest', rest: this.state.rest })
   }
 
   async pair (code, name = this.name) {
@@ -275,6 +286,8 @@ export class Phone {
 
   _onopen (link) {
     this._emitState()
+    // The computer answers with its own when that one is newer.
+    if (this.state.rest.updatedAt) link.send({ type: 'rest', rest: this.state.rest })
 
     const pending = []
     for (const msg of this.state.messages) {
@@ -296,6 +309,7 @@ export class Phone {
 
   _onframe (link, frame) {
     if (frame.type === 'hello') return this._onhello(link, frame)
+    if (frame.type === 'rest') return this._onrest(link, frame.rest)
     if (typeof frame.id !== 'string' || frame.id.length > 64) return
 
     if (frame.type === 'msg') this._onmessage(link, frame)
@@ -314,6 +328,21 @@ export class Phone {
     to.queued = to.heard === 0 && frame.queued === true
     this.save()
     this.emit({ type: 'updated', message: msg })
+  }
+
+  // Rest hours from a computer: take them if newer, and pass them on to the
+  // other computers; answer older ones with ours.
+  _onrest (link, rest) {
+    const next = cleanRest(rest)
+    if (next.updatedAt < this.state.rest.updatedAt) return link.send({ type: 'rest', rest: this.state.rest })
+    if (next.updatedAt === this.state.rest.updatedAt) return
+
+    this.state.rest = next
+    this.save()
+    this.emit({ type: 'rest', rest: next })
+    for (const other of this.links.values()) {
+      if (other !== link) other.send({ type: 'rest', rest: next })
+    }
   }
 
   // The computer may have been renamed since pairing.
@@ -362,7 +391,8 @@ export class Phone {
       this.state.messages.unshift(msg)
       this.state.messages.length = Math.min(this.state.messages.length, MAX_MESSAGES)
       this.save()
-      this.emit({ type: 'message', message: msg })
+      // quiet: rest hours, so the app posts it without sound.
+      this.emit({ type: 'message', message: msg, quiet: resting(this.state.rest) })
     }
 
     link.send({ type: 'ack', id: msg.id })

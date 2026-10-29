@@ -46,6 +46,8 @@ final class AppModel: ObservableObject {
   @Published var mode: Mode { didSet { saveSettings() } }
   @Published var idleAfter: Double { didSet { saveSettings() } }
   @Published var escalateAfter: Double { didSet { saveSettings() } }
+  // Shared with the phones through the daemon; change it with setRest.
+  @Published private(set) var rest: Rest
   // "Send to phone for 1 hour": everything goes to the phone until then.
   @Published private(set) var snoozedUntil: Date? { didSet { saveSettings() } }
 
@@ -95,6 +97,7 @@ final class AppModel: ObservableObject {
     idleAfter = defaults.object(forKey: "idleAfter") as? Double ?? 300
     escalateAfter = defaults.object(forKey: "escalateAfter") as? Double ?? 180
     snoozedUntil = (defaults.object(forKey: "snoozedUntil") as? Date).flatMap { $0 > Date() ? $0 : nil }
+    rest = (defaults.data(forKey: "rest")).flatMap { try? JSONDecoder().decode(Rest.self, from: $0) } ?? Rest()
     messages = Inbox.load()
 
     daemon.hello = { [weak self] in
@@ -185,6 +188,19 @@ final class AppModel: ObservableObject {
 
   private func sayFrame(_ message: Message) -> [String: Any] {
     ["type": "say", "id": message.id, "topic": message.topic, "text": message.body]
+  }
+
+  // Changed in Settings: it goes to the daemon, which passes it to the phones.
+  func setRest(_ next: Rest) {
+    var next = next
+    next.updatedAt = max(Date().timeIntervalSince1970 * 1000, rest.updatedAt + 1)
+    rest = next
+    saveRest()
+    daemon.send(["type": "rest", "rest": next.frame])
+  }
+
+  private func saveRest() {
+    if let data = try? JSONEncoder().encode(rest) { UserDefaults.standard.set(data, forKey: "rest") }
   }
 
   func snooze(until date: Date?) {
@@ -328,9 +344,21 @@ final class AppModel: ObservableObject {
         )
         messages.insert(message, at: 0)
         messages.sort { $0.receivedAt > $1.receivedAt }
-        if frame.notify == true { notifier.show(message) }
+        if frame.notify == true {
+          if frame.quiet == true { notifier.showQuietly(message) } else { notifier.show(message) }
+        }
       }
       Inbox.save(messages)
+
+    case "rest":
+      // The newest change wins; answer an older one with ours.
+      guard let incoming = frame.rest else { return }
+      if incoming.updatedAt > rest.updatedAt {
+        rest = incoming
+        saveRest()
+      } else if rest.updatedAt > incoming.updatedAt {
+        daemon.send(["type": "rest", "rest": rest.frame])
+      }
 
     case "heard":
       guard let id = frame.id, let i = messages.firstIndex(where: { $0.id == id && $0.mine }) else { return }

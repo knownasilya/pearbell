@@ -5,22 +5,27 @@
 //   app -> daemon  { type: 'mac', presence }   first frame
 //   app -> daemon  { type: 'presence', idle, locked, asleep, mode, idleAfter, escalateAfter }
 //   daemon -> app  { type: 'state', computer, devices }
-//   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, key?, update?, notify, route, sentAt }
+//   daemon -> app  { type: 'msg', id, title, topic, body, actions, wantsReply, key?, update?, notify, quiet, route, sentAt }
 //   app -> daemon  { type: 'ack', id }  or  { type: 'reply', id, text }
 //   app -> daemon  { type: 'say', id, topic, text }   the user wrote to a topic
 //   daemon -> app  { type: 'heard', id, listeners }   as for the phone (shared/protocol.js)
 //   daemon -> app  { type: 'routed', id, to, reason }   a question moved on to the phone
 //   daemon -> app  { type: 'closed', id, answer?, device? }
 //   daemon -> app  { type: 'synced', open }   after a (re)connect: questions still open
+//   daemon <-> app { type: 'rest', rest }   rest hours, as for the phone (shared/protocol.js)
 // key and update work as on the phone (see shared/protocol.js).
 // notify says whether the app shows a notification; otherwise it only keeps
-// the message in its inbox, because the phone got it.
+// the message in its inbox, because the phone got it. quiet: rest hours, so
+// a notification comes without sound or banner.
 //
 // pearbell mcp --channel and pearbell listen keep one open too, to hear what
 // the user writes to a topic on the phone:
 //   cli -> daemon  { type: 'listen', topics }
 //   daemon -> cli  { type: 'listening', topics }
 //   daemon -> cli  { type: 'said', id, topic, text, device, at }
+// pearbell rest reads or changes the rest hours (shared/rest.js):
+//   cli -> daemon  { type: 'rest', rest? }   rest: the fields to change
+//   daemon -> cli  { type: 'rest', rest }
 // pearbell inbox takes what nobody listened to yet:
 //   cli -> daemon  { type: 'inbox', topic }
 //   daemon -> cli  { type: 'inbox', messages: [{ id, topic, text, device, at }] }
@@ -132,6 +137,10 @@ function handle (daemon, sock, req) {
     const stop = daemon.listen(topics, reply)
     sock.once('close', stop)
     reply({ type: 'listening', topics })
+  } else if (req.type === 'rest') {
+    if (req.rest) daemon.setRest({ ...daemon.rest, ...req.rest, updatedAt: Math.max(Date.now(), daemon.rest.updatedAt + 1) })
+    reply({ type: 'rest', rest: daemon.rest })
+    sock.end()
   } else if (req.type === 'inbox') {
     const topic = String(req.topic || '').trim().slice(0, 40)
     const messages = topic ? daemon.takeInbox(topic).map(({ type, ...said }) => said) : []

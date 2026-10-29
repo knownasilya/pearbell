@@ -4,8 +4,8 @@
 // newline-delimited JSON.
 //
 // Kotlin -> worklet: init, pair, answer, say, unpair, clear, archive, delete, undelete,
-// delete-all, undelete-all, rename
-// worklet -> Kotlin: ready, state, message, updated, edited, paired, pair-error, error
+// delete-all, undelete-all, rename, rest
+// worklet -> Kotlin: ready, state, message, updated, edited, rest, paired, pair-error, error
 // (edited: the sender changed a message with an update, see shared/protocol.js)
 import fs from 'bare-fs'
 import path from 'bare-path'
@@ -47,6 +47,7 @@ async function oncommand (cmd) {
     case 'delete-all': return phone.deleteAll(Array.isArray(cmd.ids) ? cmd.ids : [])
     case 'undelete-all': return phone.undeleteAll()
     case 'rename': return phone.setName(cmd.name)
+    case 'rest': return phone.setRest(cmd.rest)
   }
 }
 
