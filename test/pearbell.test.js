@@ -417,6 +417,29 @@ test('a new listener gets what waited in the inbox; old ones expire', async (t) 
   t.alike(daemon.takeInbox('ci'), [])
 })
 
+test('rest hours set on the phone reach the computer, and the newest wins', async (t) => {
+  const { daemon, phone, events, device } = await setup(t)
+  const saved = []
+  daemon.on('rest', (r) => saved.push(r))
+
+  phone.setRest({ ...phone.state.rest, on: true, from: '23:00' })
+  await waitFor(() => daemon.rest.on)
+  t.is(daemon.rest.from, '23:00')
+  t.is(saved.length, 1, 'the daemon saves it')
+
+  // Changed on the computer (pearbell rest): the phone takes it.
+  daemon.setRest({ ...daemon.rest, days: [0, 6], updatedAt: Date.now() + 10 })
+  await waitFor(() => phone.state.rest.days.length === 2)
+  t.ok(events.find((e) => e.type === 'rest' && e.rest.days.length === 2), 'the app hears')
+
+  // An older setting from a computer is answered with the phone's own.
+  const conn = daemon.conns.get(device.publicKey)
+  daemon.rest = { ...daemon.rest, on: false, updatedAt: 1 }
+  conn.destroy()
+  await waitFor(() => daemon.rest.on && daemon.rest.days.length === 2)
+  t.pass('the phone set the computer straight on reconnect')
+})
+
 function once (emitter, name) {
   return new Promise((resolve) => emitter.once(name, resolve))
 }

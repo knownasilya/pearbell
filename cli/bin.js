@@ -10,6 +10,7 @@ import * as control from './control.js'
 import { Daemon } from './daemon.js'
 import { presenceText } from './router.js'
 import { MAX_BODY } from '../shared/protocol.js'
+import { DAYS, cleanTime, restText } from '../shared/rest.js'
 import { serveHttp } from './http.js'
 import { defaultTopic, serveMcp } from './mcp.js'
 import { hookOutput, inboxPrompt } from './hook.js'
@@ -41,6 +42,13 @@ Usage:
   pearbell inbox [-T topic] [--hook] Print (and take) what you wrote to the
                                      topic while nothing listened. --hook:
                                      as a Claude Code hook, hand it to Claude
+  pearbell rest [on|off] [--from HH:MM] [--until HH:MM] [--days sun,sat]
+                                     Rest hours: messages arrive without
+                                     sound on the phone and the Mac at night
+                                     (--from to --until, default 22:00 to
+                                     07:00) and all day on rest days
+                                     (default Sunday; --days none: no rest
+                                     day, --from off: no nights)
   pearbell http [on|off|rotate]      Local web API for tools that can only
                                      make HTTP requests (prints URL, token)
   pearbell service [install|uninstall|status]
@@ -86,6 +94,9 @@ const { values: opts, positionals } = parseArgs({
     port: { type: 'string' },
     channel: { type: 'boolean' },
     hook: { type: 'boolean' },
+    from: { type: 'string' },
+    until: { type: 'string' },
+    days: { type: 'string' },
     help: { type: 'boolean', short: 'h' }
   }
 })
@@ -123,6 +134,7 @@ async function run () {
     case 'mcp': return runMcp()
     case 'listen': return runListen()
     case 'inbox': return opts.hook ? runInboxHook() : runInbox()
+    case 'rest': return runRest()
     case 'http': return runHttp()
     case 'service': return runService()
     default: throw new Error(`Unknown command "${command}". Try pearbell --help`)
@@ -195,6 +207,41 @@ async function runSend (wantsReply, update = false) {
 
   if (missing.length) log(`${missing.join(', ')} offline; the message waits in the queue`)
   if (opts.json) console.log(JSON.stringify({ id: queued.id, ...(key ? { key } : {}), route: queued.route, delivered, queued: missing }))
+  return 0
+}
+
+async function runRest () {
+  const change = {}
+  const [toggle] = rest
+  if (toggle === 'on' || toggle === 'off') change.on = toggle === 'on'
+  else if (toggle) throw new Error('Use pearbell rest on or pearbell rest off')
+
+  if (opts.from === 'off' || opts.until === 'off') change.nightly = false
+  else {
+    for (const key of ['from', 'until']) {
+      if (opts[key] === undefined) continue
+      const time = cleanTime(opts[key])
+      if (!time) throw new Error(`--${key} takes a time like 22:00`)
+      change[key] = time
+      change.nightly = true
+    }
+  }
+  if (opts.days !== undefined) {
+    const names = opts.days.toLowerCase().split(',').map((d) => d.trim().slice(0, 3)).filter((d) => d && d !== 'non')
+    const days = names.map((d) => DAYS.indexOf(d))
+    if (days.includes(-1)) throw new Error('--days takes days like sun,sat, or none')
+    change.days = days
+  }
+  // Picking hours means you want them.
+  if (Object.keys(change).length && change.on === undefined) change.on = true
+
+  const sock = await control.connect()
+  let result = null
+  await control.request(sock, { type: 'rest', rest: Object.keys(change).length ? change : undefined }, (frame) => { result = frame })
+  if (result?.type !== 'rest') throw daemonError(result)
+
+  if (opts.json) console.log(JSON.stringify(result.rest))
+  else console.log(`Rest hours: ${restText(result.rest)}`)
   return 0
 }
 
@@ -432,10 +479,14 @@ async function waitForDaemon () {
 async function runDaemon () {
   const cfg = config.load()
   const dht = new DHT()
-  const daemon = new Daemon({ dht, keyPair: config.keyPair(cfg), devices: cfg.devices, name: config.computerName() })
+  const daemon = new Daemon({ dht, keyPair: config.keyPair(cfg), devices: cfg.devices, name: config.computerName(), rest: cfg.rest })
   const stamp = () => new Date().toISOString()
 
   daemon.on('devices', (devices) => config.save({ ...config.load(), devices }))
+  daemon.on('rest', (rest) => {
+    config.save({ ...config.load(), rest })
+    console.log(`${stamp()} rest hours: ${restText(rest)}`)
+  })
   daemon.on('connect', (d) => console.log(`${stamp()} ${d.name} connected`))
   daemon.on('disconnect', (d) => d && console.log(`${stamp()} ${d.name} disconnected`))
 

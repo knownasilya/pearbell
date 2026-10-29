@@ -9,6 +9,7 @@ import b4a from 'b4a'
 import crypto from 'hypercore-crypto'
 import { onJSON, writeJSON } from '../shared/lines.js'
 import { MAX_SAY, encodePairCode, toHex } from '../shared/protocol.js'
+import { cleanRest, resting } from '../shared/rest.js'
 import { awayReason, decide, idleSeconds, snoozeReason } from './router.js'
 
 const HELLO_TIMEOUT = 15_000
@@ -23,12 +24,13 @@ export const MAC = 'mac'
 const MAC_DEVICE = { publicKey: MAC, name: 'this Mac', mac: true }
 
 export class Daemon extends EventEmitter {
-  constructor ({ dht, keyPair, devices = [], name = os.hostname() }) {
+  constructor ({ dht, keyPair, devices = [], name = os.hostname(), rest = null }) {
     super()
     this.dht = dht
     this.keyPair = keyPair
     this.devices = devices
     this.name = name
+    this.rest = cleanRest(rest) // rest hours, shared with the phones and the Mac (shared/rest.js)
     this.server = null
     this.conns = new Map()
     this.messages = new Map()
@@ -197,6 +199,7 @@ export class Daemon extends EventEmitter {
 
     this.emit('mac', true)
     this._macState()
+    this._writeMac({ type: 'rest', rest: this.rest })
     // Questions still open show up in the app's inbox again; the app closes
     // the ones it shows that we no longer know (a daemon restart).
     const open = []
@@ -215,6 +218,30 @@ export class Daemon extends EventEmitter {
     else if (frame.type === 'ack') this._onack(MAC_DEVICE, String(frame.id))
     else if (frame.type === 'reply') this._onreply(MAC_DEVICE, null, String(frame.id), frame.text)
     else if (frame.type === 'say') this._onsay(MAC_DEVICE, conn, frame)
+    else if (frame.type === 'rest') this._onrest(conn, frame.rest)
+  }
+
+  // Rest hours changed somewhere (pearbell rest, a phone, the Mac). The newest
+  // change wins and goes on to every other device. Returns whether it won.
+  setRest (rest, from = null) {
+    const next = cleanRest(rest)
+    if (next.updatedAt <= this.rest.updatedAt) return false
+
+    this.rest = next
+    this.emit('rest', next)
+    const frame = { type: 'rest', rest: next }
+    for (const conn of this.conns.values()) {
+      if (conn !== from) writeJSON(conn, frame)
+    }
+    if (this.mac && this.mac.conn !== from) writeJSON(this.mac.conn, frame)
+    return true
+  }
+
+  // A device sent its rest hours: take them if newer, else answer with ours.
+  _onrest (conn, rest) {
+    if (!this.setRest(rest, conn) && this.rest.updatedAt > cleanRest(rest).updatedAt) {
+      writeJSON(conn, { type: 'rest', rest: this.rest })
+    }
   }
 
   setPresence (p = {}) {
@@ -297,6 +324,8 @@ export class Daemon extends EventEmitter {
     this._writeMac({
       ...entry.frame,
       notify: entry.targets.has(MAC) && !entry.delivered.has(MAC),
+      // Rest hours: notify without a sound or banner.
+      quiet: resting(this.rest),
       route: { to: entry.route.to, reason: entry.route.reason },
       sentAt: entry.sentAt
     })
@@ -348,6 +377,8 @@ export class Daemon extends EventEmitter {
         this._onreply(device, conn, frame.id, frame.text)
       } else if (frame.type === 'say') {
         this._onsay(device, conn, frame)
+      } else if (frame.type === 'rest') {
+        this._onrest(conn, frame.rest)
       } else if (frame.type === 'pending' && Array.isArray(frame.ids)) {
         // Questions the phone still shows as open, but that we lost (restart).
         for (const id of frame.ids.slice(0, 500)) {
@@ -374,6 +405,7 @@ export class Daemon extends EventEmitter {
     this._macState()
 
     writeJSON(conn, { type: 'hello', name: this.name })
+    if (this.rest.updatedAt) writeJSON(conn, { type: 'rest', rest: this.rest })
 
     for (const entry of this.messages.values()) {
       if (entry.targets.has(device.publicKey) && !entry.delivered.has(device.publicKey)) {

@@ -97,6 +97,26 @@ routed to the Mac: you are using it
 delivered to this Mac
 ```
 
+## Rest hours
+
+Rest hours keep pearbell quiet at bedtime and on rest days. Messages still arrive and wait in the inbox, but they come without a sound or a banner, on the phone and on the Mac. Questions stay open until you answer them.
+
+- **Bedtime:** every night, from 22:00 to 07:00 unless you move it.
+- **Rest days:** quiet all day. Sunday unless you pick others. The night before runs into it, so Saturday 22:00 to Monday 07:00 is one quiet stretch.
+
+It's one setting for all your devices. Change it on the phone (**Computers** screen, **Rest hours**), in the Mac app's settings, or from the terminal, and the others pick it up through the daemon. Rest hours start off; turn them on in any of the three places.
+
+```bash
+pearbell rest                               # nights 22:00–07:00, all day Sun
+pearbell rest on                            # turn them on
+pearbell rest --from 23:30 --until 6:30     # move bedtime
+pearbell rest --days sat,sun                # rest days (--days none: no rest day)
+pearbell rest --from off                    # rest days only, no bedtime
+pearbell rest off
+```
+
+On Android, quiet messages use their own notification channel, **Messages during rest hours**. In Android's settings you can let that one through Do Not Disturb, or give it a sound after all.
+
 ## Install the CLI
 
 You need Node 20 or later.
@@ -189,6 +209,7 @@ pearbell stop       # stop the background daemon
 pearbell mcp        # MCP server for AI tools, see "Use it with AI tools"
 pearbell listen -T builds   # print what you write to "builds" on the phone
 pearbell inbox -T builds    # print (and take) what waited there
+pearbell rest on            # quiet at bedtime and on Sundays, see "Rest hours"
 ```
 
 | Option | Meaning |
@@ -416,7 +437,7 @@ npm run fake-phone           # listen; type a reply and press Enter, or "@topic 
 
 ### Layout
 
-- [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams.
+- [shared/](shared): code for both sides. [phone.js](shared/phone.js) is the phone core (links, message store); [protocol.js](shared/protocol.js) has the wire frames and pairing codes; [lines.js](shared/lines.js) frames JSON over streams; [rest.js](shared/rest.js) is the rest hours setting.
 - [cli/](cli): [bin.js](cli/bin.js) (commands), [daemon.js](cli/daemon.js) (HyperDHT server, queue, topic listeners), [control.js](cli/control.js) (local socket, daemon auto-start), [router.js](cli/router.js) (Mac or phone), [mcp.js](cli/mcp.js) (MCP server and channel), [hook.js](cli/hook.js) (`inbox --hook` output), [http.js](cli/http.js) (HTTP API).
 - [macos/](macos): the SwiftUI menu bar app. It talks to the daemon over the local socket.
 - [android/](android): Kotlin app. [app.js](android/app/src/main/js/app.js) is the Bare worklet entry, bundled with `bare-pack` and linked with `bare-link` during the Gradle build. [BellService.kt](android/app/src/main/java/dev/pearbell/BellService.kt) is a foreground service that keeps the worklet alive and talks to it over Bare Kit IPC.

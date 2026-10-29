@@ -32,6 +32,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
+  // Rest hours: into Notification Center without a banner or a sound.
+  func showQuietly(_ message: Message) {
+    quiet.insert(message.id)
+    show(message, sound: false)
+  }
+
   func show(_ message: Message, sound: Bool = true) {
     let content = UNMutableNotificationContent()
     content.title = message.sender

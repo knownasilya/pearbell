@@ -68,6 +68,27 @@ async function connectMac (t, presence = AT_DESK) {
   return mac
 }
 
+test('mac: rest hours go between the app, the daemon and the phone', async (t) => {
+  const { daemon, phone } = await setup(t)
+  const mac = await connectMac(t)
+  t.ok(mac.frames.find((f) => f.type === 'rest'), 'the app gets them when it connects')
+
+  writeJSON(mac.sock, { type: 'rest', rest: { ...daemon.rest, on: true, until: '08:00', updatedAt: Date.now() } })
+  await waitFor(() => phone.state.rest.on)
+  t.is(phone.state.rest.until, '08:00', 'a change on the Mac reaches the phone')
+
+  phone.setRest({ ...phone.state.rest, days: [] })
+  await waitFor(() => mac.frames.find((f) => f.type === 'rest' && f.rest.days.length === 0))
+  t.pass('a change on the phone reaches the Mac')
+
+  const sock = await control.connect({ start: false })
+  let answer = null
+  await control.request(sock, { type: 'rest', rest: { on: false } }, (f) => { answer = f })
+  t.is(answer.rest.on, false, 'pearbell rest off')
+  t.is(answer.rest.until, '08:00', 'keeps the rest')
+  await waitFor(() => !phone.state.rest.on)
+})
+
 test('mac: at the desk, a notification shows on the Mac only', async (t) => {
   const { daemon, device, phoneMessages } = await setup(t)
   const mac = await connectMac(t)

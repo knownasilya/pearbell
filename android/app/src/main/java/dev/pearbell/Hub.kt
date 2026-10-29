@@ -39,6 +39,16 @@ data class Message(
   val open get() = wantsReply && answer == null && !closed
 }
 
+// Rest hours (shared/rest.js): quiet nights from..until, and rest days (0 is
+// Sunday). One setting for all your devices; the worklet passes changes on.
+data class Rest(
+  val on: Boolean = false,
+  val nightly: Boolean = true,
+  val from: String = "22:00",
+  val until: String = "07:00",
+  val days: Set<Int> = setOf(0),
+)
+
 sealed interface Pairing {
   data object Idle : Pairing
   data object Busy : Pairing
@@ -54,6 +64,7 @@ object Hub {
   val messages = MutableStateFlow<List<Message>>(emptyList())
   val pairing = MutableStateFlow<Pairing>(Pairing.Idle)
   val lastError = MutableStateFlow<String?>(null)
+  val rest = MutableStateFlow(Rest())
   // A message to show in full, set when a notification is tapped.
   val openMessage = MutableStateFlow<String?>(null)
   // The app is on screen, so new messages show there instead of as notifications.
@@ -114,7 +125,32 @@ object Hub {
 
   fun undeleteAll() = command("undelete-all")
 
+  fun setRest(next: Rest) {
+    rest.value = next
+    command(
+      "rest",
+      "rest" to JSONObject()
+        .put("on", next.on)
+        .put("nightly", next.nightly)
+        .put("from", next.from)
+        .put("until", next.until)
+        .put("days", JSONArray(next.days.sorted())),
+    )
+  }
+
+  fun parseRest(o: JSONObject): Rest {
+    val days = o.optJSONArray("days")
+    return Rest(
+      on = o.optBoolean("on"),
+      nightly = o.optBoolean("nightly", true),
+      from = o.optString("from", "22:00"),
+      until = o.optString("until", "07:00"),
+      days = if (days == null) setOf(0) else (0 until days.length()).map { days.getInt(it) }.toSet(),
+    )
+  }
+
   fun applyState(event: JSONObject) {
+    event.optJSONObject("rest")?.let { rest.value = parseRest(it) }
     event.optJSONArray("peers")?.let { peers.value = parsePeers(it) }
     event.optJSONArray("messages")?.let { arr ->
       messages.value = (0 until arr.length()).map { parseMessage(arr.getJSONObject(it)) }

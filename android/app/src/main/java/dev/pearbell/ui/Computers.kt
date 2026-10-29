@@ -116,6 +116,14 @@ fun ComputersScreen(peers: List<Peer>, onBack: () -> Unit, onPair: () -> Unit) {
       }
 
       item {
+        Column(Modifier.padding(top = 40.dp)) {
+          Text("Rest hours", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+          Spacer(Modifier.height(8.dp))
+          RestSettings()
+        }
+      }
+
+      item {
         Column(Modifier.padding(top = 40.dp, start = 4.dp, end = 4.dp)) {
           Text("This phone", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Spacer(Modifier.height(8.dp))

@@ -56,6 +56,10 @@ struct SettingsView: View {
           }
           .card()
 
+          SectionTitle(text: "Rest hours")
+          RestSettings()
+            .card()
+
           SectionTitle(text: "Phones")
           VStack(alignment: .leading, spacing: 10) {
             if model.devices.isEmpty {
@@ -134,6 +138,93 @@ struct SettingsView: View {
     case .phone:
       return "Everything goes to your phone. This Mac keeps a copy in the inbox, without notifications."
     }
+  }
+}
+
+// Quiet nights and rest days, the same on the phone (its Computers screen).
+private struct RestSettings: View {
+  @EnvironmentObject var model: AppModel
+
+  // Monday first, the way a week reads; 0 is Sunday as in shared/rest.js.
+  private let week = [(1, "Monday"), (2, "Tuesday"), (3, "Wednesday"), (4, "Thursday"), (5, "Friday"), (6, "Saturday"), (0, "Sunday")]
+
+  var body: some View {
+    Toggle(isOn: binding(\.on)) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Quiet at bedtime and on rest days").font(.system(size: 13))
+        Text("Messages still arrive, without a banner or a sound. Your phone uses the same hours.")
+          .font(.system(size: 11))
+          .foregroundStyle(Palette.onSurfaceVariant)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .toggleStyle(.switch)
+    .tint(Palette.primary)
+
+    if model.rest.on {
+      HStack(spacing: 8) {
+        Toggle("Bedtime", isOn: binding(\.nightly))
+          .toggleStyle(.checkbox)
+          .font(.system(size: 12))
+        Spacer()
+        if model.rest.nightly {
+          time(\.from)
+          Text("to").font(.system(size: 12)).foregroundStyle(Palette.onSurfaceVariant)
+          time(\.until)
+        }
+      }
+
+      HStack {
+        Text("Rest days").font(.system(size: 12))
+        Spacer()
+        HStack(spacing: 4) {
+          ForEach(week, id: \.0) { day, name in
+            let picked = model.rest.days.contains(day)
+            Button {
+              var next = model.rest
+              next.days = picked ? next.days.filter { $0 != day } : next.days + [day]
+              model.setRest(next)
+            } label: {
+              Text(name.prefix(1))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(picked ? Palette.onPrimary : Palette.onSurfaceVariant)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(picked ? Palette.primary : Palette.surfaceContainer))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help(name)
+            .accessibilityLabel(name)
+            .accessibilityAddTraits(picked ? .isSelected : [])
+          }
+        }
+      }
+    }
+  }
+
+  private func time(_ key: WritableKeyPath<Rest, String>) -> some View {
+    DatePicker("", selection: Binding(
+      get: { Rest.date(model.rest[keyPath: key]) },
+      set: { date in
+        var next = model.rest
+        next[keyPath: key] = Rest.time(date)
+        if next != model.rest { model.setRest(next) }
+      }
+    ), displayedComponents: .hourAndMinute)
+    .datePickerStyle(.stepperField)
+    .labelsHidden()
+    .fixedSize()
+  }
+
+  private func binding(_ key: WritableKeyPath<Rest, Bool>) -> Binding<Bool> {
+    Binding(
+      get: { model.rest[keyPath: key] },
+      set: { value in
+        var next = model.rest
+        next[keyPath: key] = value
+        model.setRest(next)
+      }
+    )
   }
 }
 
