@@ -361,7 +361,7 @@ Prefer the ask tool over `pearbell ask` in a shell. By default, Claude Code stop
 
 ### Claude Code hooks
 
-Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes. The project folder becomes the topic, and the Stop hook sends Claude's last reply in full. pearbell marks anything over 16,000 characters as cut, so there is no need to shorten it:
+Hooks run shell commands, so they use the CLI. Put this in `~/.claude/settings.json` to get a ping when Claude needs you or finishes. The project folder becomes the topic, and the Stop hook sends Claude's last reply in full. pearbell marks anything over 16,000 characters as cut, so there is no need to shorten it. When that reply ends with a question or options, tap **Ask** on its card to answer (with the [inbox hooks](#ask-a-topic-from-your-phone) set up):
 
 ```json
 {

@@ -29,6 +29,7 @@ const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import
 
 const INSTRUCTIONS = `pearbell sends messages to the user's phone (and their Mac, if the menu bar app runs) and brings their answers back.
 Use send to tell them something (a job finished, something broke). Use ask when you need a decision and they may be away from the computer: it waits for their answer.
+A sent message cannot be answered, so never put a question or a list of options in send. If you offer choices or need a reply, use ask: put the options in actions (up to 3, short labels); the user can always type a reply instead, so with more options, list them in the body and let them answer in their own words.
 Message text is Markdown, including tables, fenced code blocks and https images. For progress, send a task list ("- [ ] step" lines) with an id, then call update with the same id and "- [x]" for done steps; that edits the message in place without a new notification.`
 
 function channelInstructions (topic) {
@@ -51,7 +52,7 @@ const target = {
 const TOOLS = [
   {
     name: 'send',
-    description: 'Send a notification to the user\'s phone. Returns once it is delivered (or queued, if the phone is offline: it gets it when it reconnects). Give it an id to change it later with update.',
+    description: 'Send a notification to the user\'s phone. Returns once it is delivered (or queued, if the phone is offline: it gets it when it reconnects). Give it an id to change it later with update. The user cannot answer it: for a question or a choice, use ask.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -77,12 +78,12 @@ const TOOLS = [
   },
   {
     name: 'ask',
-    description: 'Ask the user a question on their phone and wait for the answer, which comes back as text. They can tap one of the actions or type a reply. Times out after timeout seconds (default 600).',
+    description: 'Ask the user a question on their phone and wait for the answer, which comes back as text. They can tap one of the actions or type a reply. Use it whenever you offer options or need a reply, never send. Times out after timeout seconds (default 600).',
     inputSchema: {
       type: 'object',
       properties: {
         body: { type: 'string', description: 'The question, in Markdown' },
-        actions: { type: 'array', items: { type: 'string' }, maxItems: 3, description: 'Up to 3 quick-reply buttons, such as ["Yes", "No"]. The user can always type a reply instead' },
+        actions: { type: 'array', items: { type: 'string' }, maxItems: 3, description: 'Up to 3 quick-reply buttons, such as ["Yes", "No"]: the options you are offering, as short labels. The user can always type a reply instead' },
         timeout: { type: 'number', minimum: 0, description: 'Seconds to wait for the answer (default 600, 0 waits forever)' },
         id: { type: 'string', description: 'Your own id for the question, so update can change its text while it is open' },
         ...target

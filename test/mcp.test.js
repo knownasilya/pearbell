@@ -78,6 +78,10 @@ test('mcp: initialize and list tools', async (t) => {
   t.alike(result.tools.map((x) => x.name), ['send', 'update', 'ask', 'devices'])
   t.alike(result.tools.find((x) => x.name === 'update').inputSchema.required, ['id', 'body'])
 
+  // Questions and choices go through ask: a sent message can't be answered.
+  t.ok(init.result.instructions.includes('never put a question or a list of options in send'))
+  t.ok(result.tools.find((x) => x.name === 'send').description.includes('use ask'))
+
   const unknown = await call('nope')
   t.is(unknown.error.code, -32601)
 })
