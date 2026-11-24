@@ -129,12 +129,17 @@ extension Message {
 enum Inbox {
   static let limit = 200
 
-  static var file: URL {
+  static let file: URL = {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("pearbell", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir.appendingPathComponent("messages.json")
-  }
+  }()
+
+  // Saves run off the main thread, so the popover never waits on the disk.
+  // Saves that come quickly one after another are written once, the newest.
+  private static let queue = DispatchQueue(label: "pearbell.inbox", qos: .utility)
+  private static var pending: [Message]? // only touched on queue
 
   static func load() -> [Message] {
     guard let data = try? Data(contentsOf: file) else { return [] }
@@ -142,7 +147,23 @@ enum Inbox {
   }
 
   static func save(_ messages: [Message]) {
-    guard let data = try? JSONEncoder().encode(Array(messages.prefix(limit))) else { return }
+    let snapshot = Array(messages.prefix(limit))
+    queue.async {
+      let scheduled = pending != nil
+      pending = snapshot
+      if !scheduled { queue.async { write() } }
+    }
+  }
+
+  // Before the app quits: write what is still waiting.
+  static func flush() {
+    queue.sync(execute: write)
+  }
+
+  private static func write() {
+    guard let messages = pending else { return }
+    pending = nil
+    guard let data = try? JSONEncoder().encode(messages) else { return }
     try? data.write(to: file, options: .atomic)
   }
 }
