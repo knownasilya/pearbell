@@ -28,7 +28,31 @@ struct MarkdownTable: Hashable {
 }
 
 enum Markdown {
+  // Parsing runs on every redraw of every row, and the popover redraws a lot
+  // (going back to the inbox, closing it), so each text is parsed once.
+  private final class Box<T> {
+    let value: T
+    init(_ value: T) { self.value = value }
+  }
+  private static let blockCache: NSCache<NSString, Box<[MarkdownBlock]>> = cache(500)
+  private static let inlineCache: NSCache<NSString, Box<AttributedString>> = cache(2000)
+  private static let plainCache: NSCache<NSString, NSString> = cache(500)
+  private static func cache<V: AnyObject>(_ limit: Int) -> NSCache<NSString, V> {
+    let cache = NSCache<NSString, V>()
+    cache.countLimit = limit
+    return cache
+  }
+  // Making a detector is slow; one serves every call (it is thread safe).
+  private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
   static func blocks(_ text: String) -> [MarkdownBlock] {
+    if let hit = blockCache.object(forKey: text as NSString) { return hit.value }
+    let parsed = parseBlocks(text)
+    blockCache.setObject(Box(parsed), forKey: text as NSString)
+    return parsed
+  }
+
+  private static func parseBlocks(_ text: String) -> [MarkdownBlock] {
     let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
     var blocks: [MarkdownBlock] = []
     var paragraph: [String] = []
@@ -150,6 +174,13 @@ enum Markdown {
 
   // One line of inline Markdown, with safe links styled and bare URLs linked.
   static func inline(_ text: String) -> AttributedString {
+    if let hit = inlineCache.object(forKey: text as NSString) { return hit.value }
+    let parsed = parseInline(text)
+    inlineCache.setObject(Box(parsed), forKey: text as NSString)
+    return parsed
+  }
+
+  private static func parseInline(_ text: String) -> AttributedString {
     let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
     var out = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
 
@@ -159,7 +190,7 @@ enum Markdown {
     }
 
     let plain = String(out.characters)
-    if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+    if let detector = linkDetector {
       for match in detector.matches(in: plain, range: NSRange(plain.startIndex..., in: plain)) {
         // Only what is written as a URL, like the phone: not "example.com".
         guard let url = match.url, isSafe(url),
@@ -179,6 +210,13 @@ enum Markdown {
 
   // For notifications and previews: the text without the markup.
   static func plain(_ text: String) -> String {
+    if let hit = plainCache.object(forKey: text as NSString) { return hit as String }
+    let out = parsePlain(text)
+    plainCache.setObject(out as NSString, forKey: text as NSString)
+    return out
+  }
+
+  private static func parsePlain(_ text: String) -> String {
     blocks(text).map { block in
       switch block {
       case .paragraph(let s), .heading(_, let s), .quote(let s): return String(inline(s).characters)

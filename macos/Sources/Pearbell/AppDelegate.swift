@@ -36,6 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     model.start()
   }
 
+  func applicationWillTerminate(_ notification: Notification) {
+    Inbox.flush()
+  }
+
   @objc private func toggle() {
     if popover.isShown {
       popover.performClose(nil)

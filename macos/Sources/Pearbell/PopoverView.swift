@@ -25,44 +25,7 @@ struct PopoverView: View {
         ArchiveView(close: { showArchive = false }, showTopics: { showTopics = true })
       } else {
         header
-        ScrollView {
-          VStack(alignment: .leading, spacing: 0) {
-            if model.link == .offline || model.link == .outdated {
-              DaemonCard()
-                .padding(.top, 8)
-            }
-            if model.waiting.isEmpty && model.recent.isEmpty {
-              EmptyInbox()
-            } else {
-              if !model.shownWaiting.isEmpty {
-                SectionTitle(text: "Waiting for you", count: model.shownWaiting.count)
-                ForEach(model.shownWaiting) { message in
-                  QuestionCard(message: message, shortcuts: message.id == model.shownWaiting.first?.id)
-                    .padding(.bottom, 12)
-                }
-              }
-              if !model.shownRecent.isEmpty {
-                HStack {
-                  SectionTitle(text: "Recent")
-                  Spacer()
-                  Button("Clear") { model.clearRecent() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Palette.primary)
-                    .padding(.top, 8)
-                }
-                VStack(spacing: 2) {
-                  ForEach(model.shownRecent) { message in
-                    MessageRow(message: message)
-                  }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-              }
-            }
-          }
-          .padding(.horizontal, 16)
-          .padding(.bottom, 16)
-        }
+        inbox
         if let topic = model.topic {
           AskBar(topic: topic)
         }
@@ -73,6 +36,51 @@ struct PopoverView: View {
     .animation(.easeOut(duration: 0.2), value: model.notice)
     .background(Palette.background)
     .foregroundStyle(Palette.onSurface)
+  }
+
+  // Each list is filtered once per redraw, and only the rows on screen are
+  // built (LazyVStack), so going back to a long inbox stays quick.
+  private var inbox: some View {
+    let waiting = model.shownWaiting
+    let recent = model.shownRecent
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 0) {
+        if model.link == .offline || model.link == .outdated {
+          DaemonCard()
+            .padding(.top, 8)
+        }
+        if !model.messages.contains(where: { !$0.archived }) {
+          EmptyInbox()
+        } else {
+          if !waiting.isEmpty {
+            SectionTitle(text: "Waiting for you", count: waiting.count)
+            ForEach(waiting) { message in
+              QuestionCard(message: message, shortcuts: message.id == waiting.first?.id)
+                .padding(.bottom, 12)
+            }
+          }
+          if !recent.isEmpty {
+            HStack {
+              SectionTitle(text: "Recent")
+              Spacer()
+              Button("Clear") { model.clearRecent() }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Palette.primary)
+                .padding(.top, 8)
+            }
+            LazyVStack(spacing: 2) {
+              ForEach(recent) { message in
+                MessageRow(message: message)
+              }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+          }
+        }
+      }
+      .padding(.horizontal, 16)
+      .padding(.bottom, 16)
+    }
   }
 
   private var header: some View {
@@ -622,8 +630,11 @@ struct TopicChips: View {
       let picked = topics.filter { $0.name == model.topic }
       let ordered = picked + topics.filter { $0.name != model.topic }
       // The longest row that fits wins, so the last chip says how many are left.
+      // No more than this many chips fit in the popover, so longer rows are
+      // never tried: each try is laid out, and with many topics that was slow.
+      let most = min(ordered.count, 6)
       ViewThatFits(in: .horizontal) {
-        ForEach((0...ordered.count).reversed(), id: \.self) { shown in
+        ForEach((0...most).reversed(), id: \.self) { shown in
           row(Array(ordered.prefix(shown)), hidden: ordered.count - shown)
         }
       }
@@ -930,7 +941,7 @@ struct ArchiveView: View {
             .padding(.top, 60)
             .padding(.horizontal, 32)
         } else {
-          VStack(spacing: 2) {
+          LazyVStack(spacing: 2) {
             ForEach(model.shownArchive) { message in
               MessageRow(message: message)
             }
