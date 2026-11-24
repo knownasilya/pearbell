@@ -1,5 +1,17 @@
 # Changelog
 
+## Release (2026-11-24)
+
+* pearbell 0.16.1 (patch)
+
+#### :bug: Bug Fix
+* `pearbell`
+  * [#32](https://github.com/knownasilya/pearbell/pull/32) Keep the Mac popover quick going back to the inbox and closing ([@knownasilya](https://github.com/knownasilya))
+  * [#30](https://github.com/knownasilya/pearbell/pull/30) Steer questions and choices to ask, not send ([@knownasilya](https://github.com/knownasilya))
+
+#### Committers: 1
+- Ilya Radchenko ([@knownasilya](https://github.com/knownasilya))
+
 ## Release (2026-10-29)
 
 * pearbell 0.16.0 (minor)
